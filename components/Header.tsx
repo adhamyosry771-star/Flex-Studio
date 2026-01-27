@@ -1,12 +1,12 @@
 
 import React from 'react';
-import { PlayCircle, Github } from 'lucide-react';
+import { PlayCircle } from 'lucide-react';
 
 export const Header: React.FC = () => {
   return (
     <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        {/* Logo Section - Centered text alignment for better balance */}
+        {/* Logo Section */}
         <div className="flex items-center gap-3 group cursor-pointer">
           <div className="relative">
             <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -15,7 +15,6 @@ export const Header: React.FC = () => {
             </div>
           </div>
           
-          {/* Text container changed to items-center for symmetrical look */}
           <div className="flex flex-col items-center text-center" dir="ltr">
             <h1 className="font-extrabold text-xl tracking-tight text-white leading-none flex items-center gap-1">
               Flex 
@@ -25,21 +24,10 @@ export const Header: React.FC = () => {
           </div>
         </div>
 
-        <nav className="hidden md:flex items-center gap-8">
-          <a href="#" className="text-sm font-medium text-slate-400 hover:text-white transition-colors relative group">
-            عن التطبيق
-            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-500 transition-all group-hover:w-full"></span>
-          </a>
-          <a href="#" className="text-sm font-medium text-slate-400 hover:text-white transition-colors relative group">
-            التوثيق
-            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-500 transition-all group-hover:w-full"></span>
-          </a>
-          <div className="h-4 w-px bg-slate-800"></div>
-          <button className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-lg active:scale-95">
-            <Github size={18} className="text-slate-400" />
-            <span>GitHub</span>
-          </button>
-        </nav>
+        {/* Navigation - Empty or simplified as requested */}
+        <div className="flex items-center gap-4">
+          {/* تم إزالة الروابط وزر GitHub بناءً على طلبك */}
+        </div>
       </div>
     </header>
   );
