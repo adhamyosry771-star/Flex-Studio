@@ -5,7 +5,8 @@ import {
   Pause, 
   Layers,
   Download,
-  FileArchive
+  FileArchive,
+  Video
 } from 'lucide-react';
 import { SVGAFileInfo, PlayerStatus } from '../types';
 
@@ -173,6 +174,191 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
     }
   };
 
+  const exportAsAEProject = async () => {
+    if (!playerRef.current || !videoItemRef.current || exporting) return;
+    const JSZip = (window as any).JSZip;
+    if (!JSZip) return alert("يرجى الانتظار لتحميل المكتبات اللازمة.");
+
+    try {
+      setExporting(true);
+      setExportProgress(0);
+      setExportStatus('جاري تحضير ملفات After Effects...');
+      
+      const zip = new JSZip();
+      const assetsFolder = zip.folder("assets");
+      const videoItem = videoItemRef.current;
+      
+      const imageKeys = Object.keys(videoItem.images);
+      
+      for (let i = 0; i < imageKeys.length; i++) {
+        const key = imageKeys[i];
+        let data = videoItem.images[key];
+        let base64Data = "";
+        if (typeof data === 'string') {
+           base64Data = data.replace(/^data:image\/(png|jpg);base64,/, "");
+        } else if (data.src) {
+           base64Data = data.src.replace(/^data:image\/(png|jpg);base64,/, "");
+        }
+        
+        if (base64Data) {
+           assetsFolder?.file(`${key}.png`, base64Data, {base64: true});
+        }
+      }
+
+      setExportProgress(30);
+      setExportStatus('جاري توليد بيانات التحريك...');
+
+      const width = videoItem.videoSize.width;
+      const height = videoItem.videoSize.height;
+      const fps = videoItem.FPS || 30;
+      const totalFrames = videoItem.frames;
+      const duration = totalFrames / fps;
+
+      const spritesData = videoItem.sprites.map((sprite: any) => {
+          return {
+              imageKey: sprite.imageKey,
+              frames: sprite.frames.map((f: any) => ({
+                  alpha: f.alpha,
+                  transform: f.transform ? {
+                      a: f.transform.a,
+                      b: f.transform.b,
+                      c: f.transform.c,
+                      d: f.transform.d,
+                      tx: f.transform.tx,
+                      ty: f.transform.ty
+                  } : null
+              }))
+          };
+      });
+
+      zip.file("data.json", JSON.stringify(spritesData));
+
+      setExportProgress(60);
+      setExportStatus('جاري توليد سكربت JSX...');
+
+      const fileNameWithoutExt = file.name.replace('.svga', '').replace(/"/g, '\\"');
+      const jsxContent = `// Auto-generated After Effects Script from Flex Studio Pro
+(function() {
+    app.beginUndoGroup("Import SVGA");
+
+    var compName = "${fileNameWithoutExt}";
+    var compWidth = ${width};
+    var compHeight = ${height};
+    var compPixelAspect = 1;
+    var compDuration = ${duration};
+    var compFPS = ${fps};
+
+    // Prompt user to select the assets folder
+    var assetsFolder = Folder.selectDialog("Please select the 'assets' folder for " + compName);
+    if (!assetsFolder) {
+        alert("Operation cancelled. You must select the assets folder.");
+        return;
+    }
+
+    // Look for data.json in the parent directory of the selected assets folder
+    var dataFile = new File(assetsFolder.parent.fsName + "/data.json");
+    if (!dataFile.exists) {
+        // Fallback: look inside the assets folder just in case
+        dataFile = new File(assetsFolder.fsName + "/data.json");
+        if (!dataFile.exists) {
+            alert("Could not find data.json! Please make sure it's in the same folder as the assets folder.");
+            return;
+        }
+    }
+
+    var myItemCollection = app.project.items;
+    var myComp = myItemCollection.addComp(compName, compWidth, compHeight, compPixelAspect, compDuration, compFPS);
+    myComp.openInViewer();
+
+    var importedAssets = {};
+
+    if (assetsFolder.exists) {
+        var files = assetsFolder.getFiles("*.png");
+        for (var i = 0; i < files.length; i++) {
+            var importOptions = new ImportOptions(files[i]);
+            if (importOptions.canImportAs(ImportAsType.FOOTAGE)) {
+                var importedItem = app.project.importFile(importOptions);
+                var keyName = decodeURIComponent(files[i].name).replace(".png", "");
+                importedAssets[keyName] = importedItem;
+            }
+        }
+    }
+
+    dataFile.open("r");
+    var jsonString = dataFile.read();
+    dataFile.close();
+
+    var sprites = eval("(" + jsonString + ")");
+
+    for (var s = 0; s < sprites.length; s++) {
+        var sprite = sprites[s];
+        if (!sprite.imageKey || !importedAssets[sprite.imageKey]) continue;
+        
+        var assetItem = importedAssets[sprite.imageKey];
+        var layer = myComp.layers.add(assetItem);
+        layer.name = sprite.imageKey + "_" + s;
+        
+        layer.property("Anchor Point").setValue([0, 0]);
+        
+        var opacityProp = layer.property("Opacity");
+        var positionProp = layer.property("Position");
+        var scaleProp = layer.property("Scale");
+        var rotationProp = layer.property("Rotation");
+
+        for (var f = 0; f < sprite.frames.length; f++) {
+            var frameData = sprite.frames[f];
+            var time = f / compFPS;
+            
+            var alpha = frameData.alpha !== undefined ? frameData.alpha * 100 : 100;
+            opacityProp.setValueAtTime(time, alpha);
+            
+            if (frameData.transform) {
+                var t = frameData.transform;
+                var scaleX = Math.sqrt(t.a * t.a + t.b * t.b);
+                var scaleY = Math.sqrt(t.c * t.c + t.d * t.d);
+                
+                var det = t.a * t.d - t.b * t.c;
+                if (det < 0) {
+                    scaleY = -scaleY;
+                }
+                
+                var rotation = 0;
+                if (scaleX !== 0) {
+                    rotation = Math.atan2(t.b, t.a) * (180 / Math.PI);
+                } else if (scaleY !== 0) {
+                    rotation = Math.atan2(-t.c, t.d) * (180 / Math.PI);
+                }
+                
+                positionProp.setValueAtTime(time, [t.tx, t.ty]);
+                scaleProp.setValueAtTime(time, [scaleX * 100, scaleY * 100]);
+                rotationProp.setValueAtTime(time, rotation);
+            }
+        }
+    }
+
+    app.endUndoGroup();
+    alert("تم استيراد مشروع SVGA بنجاح!");
+})();`;
+
+      zip.file(`${fileNameWithoutExt}.jsx`, jsxContent);
+
+      setExportProgress(80);
+      setExportStatus('جاري ضغط الملف وتحضير التحميل...');
+      const content = await zip.generateAsync({type: "blob"});
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = `${file.name.replace('.svga', '')}_AE_Project.zip`;
+      link.click();
+      
+      setExporting(false);
+      setExportProgress(100);
+    } catch (err) {
+      console.error("AE Export Error:", err);
+      setExporting(false);
+      alert("حدث خطأ أثناء التصدير إلى After Effects.");
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
       {exporting && (
@@ -215,6 +401,14 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
             <h4 className="text-sm font-semibold text-white truncate max-w-[200px]">{file.name}</h4>
           </div>
           <div className="flex items-center gap-2">
+             <button 
+                onClick={exportAsAEProject}
+                disabled={status !== PlayerStatus.PLAYING && status !== PlayerStatus.PAUSED || exporting}
+                className="group flex items-center gap-2 px-5 py-2.5 bg-indigo-600/10 border border-indigo-500/50 text-indigo-400 rounded-xl text-xs font-bold hover:bg-indigo-600/20 transition-all disabled:opacity-30 active:scale-95 shadow-[0_0_15px_rgba(99,102,241,0.05)]"
+             >
+                <Video size={16} />
+                تصدير لـ After Effects
+             </button>
              <button 
                 onClick={exportAsZip}
                 disabled={status !== PlayerStatus.PLAYING && status !== PlayerStatus.PAUSED || exporting}
