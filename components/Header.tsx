@@ -2,7 +2,12 @@
 import React from 'react';
 import { PlayCircle } from 'lucide-react';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  currentView?: 'viewer' | 'converter';
+  setCurrentView?: (view: 'viewer' | 'converter') => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ currentView = 'viewer', setCurrentView }) => {
   return (
     <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -26,7 +31,22 @@ export const Header: React.FC = () => {
 
         {/* Navigation - Empty or simplified as requested */}
         <div className="flex items-center gap-4">
-          {/* تم إزالة الروابط وزر GitHub بناءً على طلبك */}
+          {setCurrentView && (
+            <>
+              <button
+                onClick={() => setCurrentView('viewer')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${currentView === 'viewer' ? 'bg-blue-500/20 backdrop-blur-md border border-blue-500/30 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'}`}
+              >
+                عارض SVGA
+              </button>
+              <button
+                onClick={() => setCurrentView('converter')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${currentView === 'converter' ? 'bg-indigo-500/20 backdrop-blur-md border border-indigo-500/30 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'}`}
+              >
+                تحويل فيديو إلى SVGA
+              </button>
+            </>
+          )}
         </div>
       </div>
     </header>

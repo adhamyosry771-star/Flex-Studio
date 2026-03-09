@@ -3,6 +3,7 @@ import React, { useState, useCallback } from 'react';
 import { Header } from './components/Header';
 import { SVGAViewer } from './components/SVGAViewer';
 import { DropZone } from './components/DropZone';
+import { VideoToSVGA } from './components/VideoToSVGA';
 import { SVGAFileInfo } from './types';
 import { FolderUp, History, Info } from 'lucide-react';
 
@@ -13,6 +14,7 @@ interface SVGAFileExtended extends SVGAFileInfo {
 const App: React.FC = () => {
   const [currentFile, setCurrentFile] = useState<SVGAFileExtended | null>(null);
   const [history, setHistory] = useState<SVGAFileExtended[]>([]);
+  const [currentView, setCurrentView] = useState<'viewer' | 'converter'>('viewer');
 
   const handleFileUpload = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
@@ -42,10 +44,12 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-right" dir="rtl">
-      <Header />
+      <Header currentView={currentView} setCurrentView={setCurrentView} />
       
       <main className="flex-1 container mx-auto px-4 py-8">
-        {!currentFile ? (
+        {currentView === 'converter' ? (
+          <VideoToSVGA />
+        ) : !currentFile ? (
           <div className="flex flex-col lg:flex-row gap-8">
             <div className="flex-1">
               <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">

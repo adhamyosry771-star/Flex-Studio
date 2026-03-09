@@ -6,8 +6,14 @@ import {
   Layers,
   Download,
   FileArchive,
-  Video
+  Video,
+  Eye,
+  EyeOff,
+  ImagePlus
 } from 'lucide-react';
+import pako from 'pako';
+import { parse } from 'protobufjs';
+import { svgaSchema } from '../svga-proto';
 import { SVGAFileInfo, PlayerStatus } from '../types';
 
 interface SVGAViewerProps {
@@ -30,6 +36,9 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState('');
+  const [hiddenAssets, setHiddenAssets] = useState<Set<string>>(new Set());
+  const [replacedAssets, setReplacedAssets] = useState<Record<string, File>>({});
+  const [replacedAssetsUrls, setReplacedAssetsUrls] = useState<Record<string, string>>({});
 
   const bgOptions = [
     { label: 'داكن', value: '#0f172a' },
@@ -108,6 +117,51 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
     setStatus(status === PlayerStatus.PLAYING ? PlayerStatus.PAUSED : PlayerStatus.PLAYING);
   };
 
+  const toggleAssetVisibility = (assetId: string) => {
+    if (!playerRef.current || !videoItemRef.current) return;
+    
+    setHiddenAssets(prev => {
+      const newHidden = new Set(prev);
+      if (newHidden.has(assetId)) {
+        newHidden.delete(assetId);
+      } else {
+        newHidden.add(assetId);
+      }
+      
+      const videoItem = videoItemRef.current;
+      if (videoItem && videoItem.sprites) {
+        if (newHidden.has(assetId)) {
+          playerRef.current.setImage('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', assetId);
+        } else {
+          const restoredUrl = replacedAssetsUrls[assetId] || assets.find(a => a.id === assetId)?.data;
+          if (restoredUrl) {
+            playerRef.current.setImage(restoredUrl, assetId);
+          }
+        }
+      }
+      
+      return newHidden;
+    });
+  };
+
+  const handleReplaceAsset = (assetId: string, file: File) => {
+    const url = URL.createObjectURL(file);
+    setReplacedAssets(prev => ({ ...prev, [assetId]: file }));
+    setReplacedAssetsUrls(prev => ({ ...prev, [assetId]: url }));
+    
+    if (hiddenAssets.has(assetId)) {
+      setHiddenAssets(prev => {
+        const newHidden = new Set(prev);
+        newHidden.delete(assetId);
+        return newHidden;
+      });
+    }
+    
+    if (playerRef.current) {
+      playerRef.current.setImage(url, assetId);
+    }
+  };
+
   const exportAsZip = async () => {
     if (!playerRef.current || !videoItemRef.current || exporting) return;
     const JSZip = (window as any).JSZip;
@@ -137,6 +191,11 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
       const exportPlayer = new SVGA.Player(exportContainer);
       exportPlayer.setContentMode('Fill'); 
       exportPlayer.setVideoItem(videoItemRef.current);
+
+      // Apply hidden assets to export player
+      hiddenAssets.forEach(assetId => {
+         exportPlayer.setImage('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', assetId);
+      });
 
       await new Promise(r => setTimeout(r, 800));
 
@@ -359,6 +418,144 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
     }
   };
 
+  const downloadModifiedSVGA = async () => {
+    if (hiddenAssets.size === 0 && Object.keys(replacedAssets).length === 0) {
+      const a = document.createElement('a');
+      a.href = file.url;
+      a.download = file.name;
+      a.click();
+      return;
+    }
+
+    try {
+      setExporting(true);
+      setExportStatus('جاري تعديل ملف SVGA...');
+      setExportProgress(10);
+
+      let buffer: ArrayBuffer;
+      if (originalFile) {
+        buffer = await originalFile.arrayBuffer();
+      } else {
+        const res = await fetch(file.url);
+        buffer = await res.arrayBuffer();
+      }
+
+      setExportProgress(30);
+
+      const uint8Array = new Uint8Array(buffer);
+      const isZip = uint8Array[0] === 0x50 && uint8Array[1] === 0x4B && uint8Array[2] === 0x03 && uint8Array[3] === 0x04;
+
+      const transparentPngBytes = new Uint8Array([
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 
+        0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 
+        0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 
+        1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+      ]);
+
+      let finalBlob: Blob;
+
+      if (isZip) {
+        // SVGA 1.0 (ZIP)
+        const JSZip = (window as any).JSZip;
+        if (!JSZip) throw new Error("JSZip not loaded");
+        
+        const zip = await JSZip.loadAsync(buffer);
+        setExportProgress(60);
+
+        hiddenAssets.forEach(assetId => {
+          const possibleNames = [assetId, `${assetId}.png`, `${assetId}.jpg`, `${assetId}.jpeg`];
+          let found = false;
+          for (const name of possibleNames) {
+            if (zip.file(name)) {
+              zip.file(name, transparentPngBytes);
+              found = true;
+            }
+          }
+          if (!found) {
+            zip.file(assetId, transparentPngBytes);
+            zip.file(`${assetId}.png`, transparentPngBytes);
+          }
+        });
+
+        for (const [assetId, replaceFile] of Object.entries(replacedAssets)) {
+          const replaceBuffer = await replaceFile.arrayBuffer();
+          const replaceBytes = new Uint8Array(replaceBuffer);
+          const possibleNames = [assetId, `${assetId}.png`, `${assetId}.jpg`, `${assetId}.jpeg`];
+          let found = false;
+          for (const name of possibleNames) {
+            if (zip.file(name)) {
+              zip.file(name, replaceBytes);
+              found = true;
+            }
+          }
+          if (!found) {
+            zip.file(assetId, replaceBytes);
+            zip.file(`${assetId}.png`, replaceBytes);
+          }
+        }
+
+        setExportProgress(80);
+        const content = await zip.generateAsync({type: "blob"});
+        finalBlob = content;
+      } else {
+        // SVGA 2.0 (zlib + protobuf)
+        setExportStatus('جاري فك ضغط الملف...');
+        const inflated = pako.inflate(uint8Array);
+        
+        setExportProgress(50);
+        setExportStatus('جاري تحليل البيانات...');
+        
+        const root = parse(svgaSchema).root;
+        const MovieEntity = root.lookupType("com.opensource.svga.MovieEntity");
+        
+        const message = MovieEntity.decode(inflated) as any;
+        
+        setExportProgress(70);
+        setExportStatus('جاري تطبيق التعديلات...');
+
+        if (message.images) {
+          hiddenAssets.forEach(assetId => {
+            if (message.images[assetId]) {
+              message.images[assetId] = transparentPngBytes;
+            }
+          });
+          
+          for (const [assetId, replaceFile] of Object.entries(replacedAssets)) {
+            if (message.images[assetId]) {
+              const replaceBuffer = await replaceFile.arrayBuffer();
+              message.images[assetId] = new Uint8Array(replaceBuffer);
+            }
+          }
+        }
+
+        setExportProgress(80);
+        setExportStatus('جاري إعادة ضغط الملف...');
+
+        const encoded = MovieEntity.encode(message).finish();
+        const deflated = pako.deflate(encoded);
+        
+        finalBlob = new Blob([deflated], { type: 'application/octet-stream' });
+      }
+
+      setExportProgress(90);
+      setExportStatus('جاري حفظ الملف...');
+      
+      const url = URL.createObjectURL(finalBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${file.name.replace('.svga', '')}_modified.svga`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setExportProgress(100);
+      setExporting(false);
+    } catch (err) {
+      console.error("SVGA Modify Error:", err);
+      setExporting(false);
+      alert("حدث خطأ أثناء تعديل وحفظ ملف SVGA. يرجى التأكد من صحة الملف.");
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-950">
       {exporting && (
@@ -400,24 +597,33 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
           <div className="flex items-center gap-3">
             <h4 className="text-sm font-semibold text-white truncate max-w-[200px]">{file.name}</h4>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
              <button 
                 onClick={exportAsAEProject}
                 disabled={status !== PlayerStatus.PLAYING && status !== PlayerStatus.PAUSED || exporting}
-                className="group flex items-center gap-2 px-5 py-2.5 bg-indigo-600/10 border border-indigo-500/50 text-indigo-400 rounded-xl text-xs font-bold hover:bg-indigo-600/20 transition-all disabled:opacity-30 active:scale-95 shadow-[0_0_15px_rgba(99,102,241,0.05)]"
+                className="group flex items-center gap-2 px-4 py-2 bg-indigo-600/10 border border-indigo-500/50 text-indigo-400 rounded-xl text-xs font-bold hover:bg-indigo-600/20 transition-all disabled:opacity-30 active:scale-95 shadow-[0_0_15px_rgba(99,102,241,0.05)]"
              >
                 <Video size={16} />
-                تصدير لـ After Effects
+                تصدير لـ AE
              </button>
              <button 
                 onClick={exportAsZip}
                 disabled={status !== PlayerStatus.PLAYING && status !== PlayerStatus.PAUSED || exporting}
-                className="group flex items-center gap-2 px-5 py-2.5 bg-blue-600/10 border border-blue-500/50 text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-600/20 transition-all disabled:opacity-30 active:scale-95 shadow-[0_0_15px_rgba(59,130,246,0.05)]"
+                className="group flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-500/50 text-blue-400 rounded-xl text-xs font-bold hover:bg-blue-600/20 transition-all disabled:opacity-30 active:scale-95 shadow-[0_0_15px_rgba(59,130,246,0.05)]"
              >
                 <FileArchive size={16} />
                 تصدير لـ PNG
              </button>
-             <button onClick={onClear} className="p-2 text-slate-500 hover:text-white transition-colors">
+             <div className="w-px h-6 bg-slate-800 mx-1"></div>
+             <button 
+                onClick={downloadModifiedSVGA} 
+                className="group flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all active:scale-95"
+                title="تحميل ملف SVGA (يتضمن التعديلات)"
+             >
+                <Download size={16} />
+                تحميل SVGA
+             </button>
+             <button onClick={onClear} className="p-2 text-slate-500 hover:text-white transition-colors ml-2" title="إغلاق الملف">
                 <Download size={18} className="rotate-180" />
              </button>
           </div>
@@ -474,22 +680,53 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">
-            {assets.map((asset, idx) => (
-              <div key={asset.id + idx} className="group relative bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden hover:border-indigo-500/50 transition-all duration-300">
+            {assets.map((asset, idx) => {
+              const isHidden = hiddenAssets.has(asset.id);
+              const displaySrc = replacedAssetsUrls[asset.id] || asset.data;
+              return (
+              <div key={asset.id + idx} className={`group relative bg-slate-900 rounded-2xl border ${isHidden ? 'border-red-500/50 opacity-50' : 'border-slate-800 hover:border-indigo-500/50'} overflow-hidden transition-all duration-300`}>
                 <div className="aspect-square relative bg-slate-800/30 p-4 flex items-center justify-center overflow-hidden">
                   <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
-                  <img src={asset.data} alt={asset.id} className="relative max-w-full max-h-full object-contain drop-shadow-xl group-hover:scale-110 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                     <button onClick={() => { const l=document.createElement('a'); l.href=asset.data; l.download=`${asset.id}.png`; l.click(); }} className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-all active:scale-90">
-                      <Download size={18} />
+                  <img src={displaySrc} alt={asset.id} className={`relative max-w-full max-h-full object-contain drop-shadow-xl transition-transform duration-500 ${isHidden ? 'grayscale' : 'group-hover:scale-110'}`} />
+                  <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                     <button 
+                       onClick={() => toggleAssetVisibility(asset.id)} 
+                       className={`p-2 rounded-full text-white backdrop-blur-md transition-all active:scale-90 ${isHidden ? 'bg-green-500/20 hover:bg-green-500/40' : 'bg-red-500/20 hover:bg-red-500/40'}`}
+                       title={isHidden ? "استرجاع القطعة" : "إخفاء القطعة"}
+                     >
+                      {isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
+                     </button>
+                     <label 
+                       className="p-2 bg-blue-500/20 hover:bg-blue-500/40 rounded-full text-white backdrop-blur-md transition-all active:scale-90 cursor-pointer"
+                       title="استبدال القطعة"
+                     >
+                       <ImagePlus size={16} />
+                       <input 
+                         type="file" 
+                         accept="image/*" 
+                         className="hidden" 
+                         onChange={(e) => {
+                           if (e.target.files && e.target.files[0]) {
+                             handleReplaceAsset(asset.id, e.target.files[0]);
+                           }
+                         }}
+                       />
+                     </label>
+                     <button 
+                       onClick={() => { const l=document.createElement('a'); l.href=displaySrc; l.download=`${asset.id}.png`; l.click(); }} 
+                       className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-all active:scale-90"
+                       title="تحميل القطعة"
+                     >
+                      <Download size={16} />
                      </button>
                   </div>
                 </div>
-                <div className="p-3 bg-slate-900/80 text-center border-t border-slate-800/50">
+                <div className="p-3 bg-slate-900/80 text-center border-t border-slate-800/50 flex flex-col gap-1">
                   <span className="text-[10px] font-mono text-slate-400 truncate block px-2">ID: {asset.id}</span>
+                  {replacedAssetsUrls[asset.id] && <span className="text-[10px] text-blue-400 font-bold">مستبدلة</span>}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       </div>
