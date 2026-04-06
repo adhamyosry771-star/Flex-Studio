@@ -9,7 +9,7 @@ import {
   Video,
   Eye,
   EyeOff,
-  ImagePlus
+  RefreshCw
 } from 'lucide-react';
 import pako from 'pako';
 import { parse } from 'protobufjs';
@@ -37,8 +37,9 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStatus, setExportStatus] = useState('');
   const [hiddenAssets, setHiddenAssets] = useState<Set<string>>(new Set());
-  const [replacedAssets, setReplacedAssets] = useState<Record<string, File>>({});
-  const [replacedAssetsUrls, setReplacedAssetsUrls] = useState<Record<string, string>>({});
+  const [replacedAssets, setReplacedAssets] = useState<Record<string, string>>({});
+  const [activeReplaceId, setActiveReplaceId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const bgOptions = [
     { label: 'داكن', value: '#0f172a' },
@@ -111,6 +112,87 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
     return () => { isMounted = false; player?.stopAnimation(); };
   }, [file.url, originalFile, isLoop]);
 
+  const base64ToUint8Array = (base64: string) => {
+    const binaryString = window.atob(base64.split(',')[1]);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  };
+
+  const processReplacement = (assetId: string, originalDataUrl: string, newFile: File) => {
+    const newUrl = URL.createObjectURL(newFile);
+    
+    const origImg = new Image();
+    origImg.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = origImg.width;
+      canvas.height = origImg.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(origImg, 0, 0);
+      
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+      let hasPixels = false;
+
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const alpha = data[(y * canvas.width + x) * 4 + 3];
+          if (alpha > 10) {
+            hasPixels = true;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      const bbox = hasPixels 
+        ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }
+        : { x: 0, y: 0, w: origImg.width, h: origImg.height };
+
+      const newImg = new Image();
+      newImg.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const scale = Math.min(bbox.w / newImg.width, bbox.h / newImg.height);
+        const drawW = newImg.width * scale;
+        const drawH = newImg.height * scale;
+        const drawX = bbox.x + (bbox.w - drawW) / 2;
+        const drawY = bbox.y + (bbox.h - drawH) / 2;
+
+        ctx.drawImage(newImg, drawX, drawY, drawW, drawH);
+        
+        const resultDataUrl = canvas.toDataURL('image/png');
+        
+        setReplacedAssets(prev => ({ ...prev, [assetId]: resultDataUrl }));
+        
+        if (playerRef.current) {
+          playerRef.current.setImage(resultDataUrl, assetId);
+        }
+      };
+      newImg.src = newUrl;
+    };
+    origImg.src = originalDataUrl;
+  };
+
+  const handleReplaceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && activeReplaceId) {
+      const originalAsset = assets.find(a => a.id === activeReplaceId);
+      if (originalAsset) {
+        processReplacement(activeReplaceId, originalAsset.data, file);
+      }
+    }
+    if (e.target) e.target.value = '';
+    setActiveReplaceId(null);
+  };
+
   const togglePlay = () => {
     if (!playerRef.current) return;
     status === PlayerStatus.PLAYING ? playerRef.current.pauseAnimation() : playerRef.current.resumeAnimation();
@@ -128,38 +210,32 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
         newHidden.add(assetId);
       }
       
+      // Update SVGA player dynamically
       const videoItem = videoItemRef.current;
       if (videoItem && videoItem.sprites) {
+        // We need to modify the sprites array to hide/show the specific imageKey
+        videoItem.sprites.forEach((sprite: any) => {
+          if (sprite.imageKey === assetId) {
+            // If hiding, we set alpha to 0 for all frames. If showing, we restore original alpha.
+            // SVGA Player doesn't have a direct "hide layer" API, so we manipulate the dynamic text/image feature
+            // or we can use setImage to replace it with an empty transparent image
+          }
+        });
+        
         if (newHidden.has(assetId)) {
+          // Hide by setting an empty transparent 1x1 image
           playerRef.current.setImage('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', assetId);
         } else {
-          const restoredUrl = replacedAssetsUrls[assetId] || assets.find(a => a.id === assetId)?.data;
-          if (restoredUrl) {
-            playerRef.current.setImage(restoredUrl, assetId);
+          // Restore original image
+          const originalAsset = assets.find(a => a.id === assetId);
+          if (originalAsset) {
+            playerRef.current.setImage(originalAsset.data, assetId);
           }
         }
       }
       
       return newHidden;
     });
-  };
-
-  const handleReplaceAsset = (assetId: string, file: File) => {
-    const url = URL.createObjectURL(file);
-    setReplacedAssets(prev => ({ ...prev, [assetId]: file }));
-    setReplacedAssetsUrls(prev => ({ ...prev, [assetId]: url }));
-    
-    if (hiddenAssets.has(assetId)) {
-      setHiddenAssets(prev => {
-        const newHidden = new Set(prev);
-        newHidden.delete(assetId);
-        return newHidden;
-      });
-    }
-    
-    if (playerRef.current) {
-      playerRef.current.setImage(url, assetId);
-    }
   };
 
   const exportAsZip = async () => {
@@ -477,22 +553,21 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
           }
         });
 
-        for (const [assetId, replaceFile] of Object.entries(replacedAssets)) {
-          const replaceBuffer = await replaceFile.arrayBuffer();
-          const replaceBytes = new Uint8Array(replaceBuffer);
+        Object.entries(replacedAssets).forEach(([assetId, dataUrl]) => {
+          const bytes = base64ToUint8Array(dataUrl);
           const possibleNames = [assetId, `${assetId}.png`, `${assetId}.jpg`, `${assetId}.jpeg`];
           let found = false;
           for (const name of possibleNames) {
             if (zip.file(name)) {
-              zip.file(name, replaceBytes);
+              zip.file(name, bytes);
               found = true;
             }
           }
           if (!found) {
-            zip.file(assetId, replaceBytes);
-            zip.file(`${assetId}.png`, replaceBytes);
+            zip.file(assetId, bytes);
+            zip.file(`${assetId}.png`, bytes);
           }
-        }
+        });
 
         setExportProgress(80);
         const content = await zip.generateAsync({type: "blob"});
@@ -519,13 +594,11 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
               message.images[assetId] = transparentPngBytes;
             }
           });
-          
-          for (const [assetId, replaceFile] of Object.entries(replacedAssets)) {
+          Object.entries(replacedAssets).forEach(([assetId, dataUrl]) => {
             if (message.images[assetId]) {
-              const replaceBuffer = await replaceFile.arrayBuffer();
-              message.images[assetId] = new Uint8Array(replaceBuffer);
+              message.images[assetId] = base64ToUint8Array(dataUrl);
             }
-          }
+          });
         }
 
         setExportProgress(80);
@@ -680,50 +753,52 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              accept="image/png, image/jpeg" 
+              onChange={handleReplaceFileChange} 
+            />
             {assets.map((asset, idx) => {
               const isHidden = hiddenAssets.has(asset.id);
-              const displaySrc = replacedAssetsUrls[asset.id] || asset.data;
+              const isReplaced = !!replacedAssets[asset.id];
+              const displayData = replacedAssets[asset.id] || asset.data;
+              
               return (
-              <div key={asset.id + idx} className={`group relative bg-slate-900 rounded-2xl border ${isHidden ? 'border-red-500/50 opacity-50' : 'border-slate-800 hover:border-indigo-500/50'} overflow-hidden transition-all duration-300`}>
+              <div key={asset.id + idx} className={`group relative bg-slate-900 rounded-2xl border ${isHidden ? 'border-red-500/50 opacity-50' : isReplaced ? 'border-green-500/50' : 'border-slate-800 hover:border-indigo-500/50'} overflow-hidden transition-all duration-300`}>
                 <div className="aspect-square relative bg-slate-800/30 p-4 flex items-center justify-center overflow-hidden">
                   <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
-                  <img src={displaySrc} alt={asset.id} className={`relative max-w-full max-h-full object-contain drop-shadow-xl transition-transform duration-500 ${isHidden ? 'grayscale' : 'group-hover:scale-110'}`} />
+                  <img src={displayData} alt={asset.id} className={`relative max-w-full max-h-full object-contain drop-shadow-xl transition-transform duration-500 ${isHidden ? 'grayscale' : 'group-hover:scale-110'}`} />
                   <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                      <button 
                        onClick={() => toggleAssetVisibility(asset.id)} 
-                       className={`p-2 rounded-full text-white backdrop-blur-md transition-all active:scale-90 ${isHidden ? 'bg-green-500/20 hover:bg-green-500/40' : 'bg-red-500/20 hover:bg-red-500/40'}`}
+                       className={`p-2.5 rounded-full text-white backdrop-blur-md transition-all active:scale-90 ${isHidden ? 'bg-green-500/20 hover:bg-green-500/40' : 'bg-red-500/20 hover:bg-red-500/40'}`}
                        title={isHidden ? "استرجاع القطعة" : "إخفاء القطعة"}
                      >
                       {isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
                      </button>
-                     <label 
-                       className="p-2 bg-blue-500/20 hover:bg-blue-500/40 rounded-full text-white backdrop-blur-md transition-all active:scale-90 cursor-pointer"
-                       title="استبدال القطعة"
-                     >
-                       <ImagePlus size={16} />
-                       <input 
-                         type="file" 
-                         accept="image/*" 
-                         className="hidden" 
-                         onChange={(e) => {
-                           if (e.target.files && e.target.files[0]) {
-                             handleReplaceAsset(asset.id, e.target.files[0]);
-                           }
-                         }}
-                       />
-                     </label>
                      <button 
-                       onClick={() => { const l=document.createElement('a'); l.href=displaySrc; l.download=`${asset.id}.png`; l.click(); }} 
-                       className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-all active:scale-90"
+                       onClick={() => {
+                         setActiveReplaceId(asset.id);
+                         fileInputRef.current?.click();
+                       }} 
+                       className="p-2.5 bg-blue-500/20 hover:bg-blue-500/40 rounded-full text-white backdrop-blur-md transition-all active:scale-90"
+                       title="استبدال القطعة (بالمقاس الذكي)"
+                     >
+                      <RefreshCw size={16} />
+                     </button>
+                     <button 
+                       onClick={() => { const l=document.createElement('a'); l.href=displayData; l.download=`${asset.id}.png`; l.click(); }} 
+                       className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-all active:scale-90"
                        title="تحميل القطعة"
                      >
                       <Download size={16} />
                      </button>
                   </div>
                 </div>
-                <div className="p-3 bg-slate-900/80 text-center border-t border-slate-800/50 flex flex-col gap-1">
+                <div className="p-3 bg-slate-900/80 text-center border-t border-slate-800/50">
                   <span className="text-[10px] font-mono text-slate-400 truncate block px-2">ID: {asset.id}</span>
-                  {replacedAssetsUrls[asset.id] && <span className="text-[10px] text-blue-400 font-bold">مستبدلة</span>}
                 </div>
               </div>
             )})}

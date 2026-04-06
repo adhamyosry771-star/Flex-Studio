@@ -3,8 +3,8 @@ import React from 'react';
 import { PlayCircle } from 'lucide-react';
 
 interface HeaderProps {
-  currentView?: 'viewer' | 'converter';
-  setCurrentView?: (view: 'viewer' | 'converter') => void;
+  currentView?: 'viewer' | 'converter' | 'matcher';
+  setCurrentView?: (view: 'viewer' | 'converter' | 'matcher') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ currentView = 'viewer', setCurrentView }) => {
@@ -44,6 +44,12 @@ export const Header: React.FC<HeaderProps> = ({ currentView = 'viewer', setCurre
                 className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${currentView === 'converter' ? 'bg-indigo-500/20 backdrop-blur-md border border-indigo-500/30 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'}`}
               >
                 تحويل فيديو إلى SVGA
+              </button>
+              <button
+                onClick={() => setCurrentView('matcher')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${currentView === 'matcher' ? 'bg-pink-500/20 backdrop-blur-md border border-pink-500/30 text-pink-300 shadow-[0_0_15px_rgba(236,72,153,0.15)]' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'}`}
+              >
+                تطابق الصور
               </button>
             </>
           )}

@@ -9,8 +9,6 @@ export const VideoToSVGA: React.FC = () => {
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [featherX, setFeatherX] = useState<number>(0);
   const [featherY, setFeatherY] = useState<number>(0);
-  const [resolutionScale, setResolutionScale] = useState<number>(50);
-  const [fps, setFps] = useState<number>(15);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -126,6 +124,7 @@ export const VideoToSVGA: React.FC = () => {
 
     try {
       const video = videoRef.current;
+      const fps = 15; // Fixed FPS for SVGA to keep size reasonable
       const duration = video.duration;
       
       if (duration > 15) {
@@ -135,9 +134,8 @@ export const VideoToSVGA: React.FC = () => {
       }
       
       const totalFrames = Math.floor(duration * fps);
-      const scale = resolutionScale / 100;
-      const w = Math.round(video.videoWidth * scale);
-      const h = Math.round(video.videoHeight * scale);
+      const w = video.videoWidth;
+      const h = video.videoHeight;
 
       const canvas = document.createElement('canvas');
       canvas.width = w;
@@ -161,18 +159,14 @@ export const VideoToSVGA: React.FC = () => {
 
         drawFrame(video, canvas, featherX, featherY);
         
-        const hasAlpha = featherX > 0 || featherY > 0;
-        const mimeType = hasAlpha ? 'image/png' : 'image/jpeg';
-        const quality = hasAlpha ? undefined : 0.8;
-
-        const imgBuffer = await new Promise<Uint8Array>(resolve => {
+        const pngBuffer = await new Promise<Uint8Array>(resolve => {
           canvas.toBlob(blob => {
             const reader = new FileReader();
             reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
             reader.readAsArrayBuffer(blob!);
-          }, mimeType, quality);
+          }, 'image/png');
         });
-        framePngs.push(imgBuffer);
+        framePngs.push(pngBuffer);
         setProgress(Math.round((i / totalFrames) * 50));
       }
 
@@ -282,41 +276,6 @@ export const VideoToSVGA: React.FC = () => {
             </div>
             
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-300 flex justify-between">
-                  <span>جودة الفيديو (الدقة)</span>
-                  <span className="text-indigo-400">{resolutionScale}%</span>
-                </label>
-                <input 
-                  type="range" 
-                  min="10" 
-                  max="100" 
-                  step="10"
-                  value={resolutionScale} 
-                  onChange={(e) => setResolutionScale(Number(e.target.value))}
-                  className="w-full accent-indigo-500"
-                />
-                <p className="text-xs text-slate-500 mt-1">تقليل الجودة يقلل من حجم الملف بشكل كبير جداً.</p>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-slate-300 flex justify-between">
-                  <span>معدل الإطارات (FPS)</span>
-                  <span className="text-indigo-400">{fps}</span>
-                </label>
-                <input 
-                  type="range" 
-                  min="5" 
-                  max="30" 
-                  step="1"
-                  value={fps} 
-                  onChange={(e) => setFps(Number(e.target.value))}
-                  className="w-full accent-indigo-500"
-                />
-              </div>
-
-              <div className="w-full h-px bg-slate-800 my-2"></div>
-
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-slate-300 flex justify-between">
                   <span>شفافية العرض (أفقي)</span>
