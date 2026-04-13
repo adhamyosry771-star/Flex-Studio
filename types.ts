@@ -7,6 +7,10 @@ export interface SVGAFileInfo {
   url: string;
 }
 
+export interface SVGAFileExtended extends SVGAFileInfo {
+  rawFile: File;
+}
+
 export enum PlayerStatus {
   IDLE = 'IDLE',
   LOADING = 'LOADING',

@@ -3,10 +3,10 @@ import React, { useState } from 'react';
 import { UploadCloud, FileType } from 'lucide-react';
 
 interface DropZoneProps {
-  onFileSelect: (file: File) => void;
+  onFilesSelect: (files: File[]) => void;
 }
 
-export const DropZone: React.FC<DropZoneProps> = ({ onFileSelect }) => {
+export const DropZone: React.FC<DropZoneProps> = ({ onFilesSelect }) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -21,18 +21,18 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelect }) => {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files.length > 0 && files[0].name.toLowerCase().endsWith('.svga')) {
-      onFileSelect(files[0]);
+    const files = (Array.from(e.dataTransfer.files) as File[]).filter(f => f.name.toLowerCase().endsWith('.svga'));
+    if (files.length > 0) {
+      onFilesSelect(files);
     } else {
-      alert('يرجى اختيار ملف SVGA صالح (.svga)');
+      alert('يرجى اختيار ملفات SVGA صالحة (.svga)');
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      onFileSelect(files[0]);
+    const files = (Array.from(e.target.files || []) as File[]).filter(f => f.name.toLowerCase().endsWith('.svga'));
+    if (files.length > 0) {
+      onFilesSelect(files);
     }
   };
 
@@ -41,7 +41,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelect }) => {
       className={`relative min-h-[400px] flex flex-col items-center justify-center p-8 transition-all duration-300 border-2 border-dashed rounded-3xl cursor-pointer
         ${isDragging 
           ? 'bg-blue-600/10 border-blue-500 scale-[0.99]' 
-          : 'bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-800/50'
+          : 'bg-transparent border-slate-800 hover:border-slate-700 hover:bg-slate-800/20'
         }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -53,20 +53,21 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelect }) => {
         type="file" 
         className="hidden" 
         accept=".svga"
+        multiple
         onChange={handleFileInput}
       />
       
-      <div className="bg-slate-800 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform shadow-xl">
+      <div className="bg-slate-800/40 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform shadow-xl">
         <UploadCloud size={48} className="text-blue-500" />
       </div>
       
-      <h2 className="text-2xl font-bold mb-2 text-white text-center">قم بسحب ملف SVGA هنا</h2>
+      <h2 className="text-2xl font-bold mb-2 text-white text-center">قم بسحب ملفات SVGA هنا</h2>
       <p className="text-slate-400 text-center mb-8 max-w-sm">
-        أو انقر لاختيار ملف من جهازك. يدعم العارض ملفات SVGA ذات الرسوم المتحركة المتجهة.
+        أو انقر لاختيار ملفات من جهازك. يدعم العارض عرض عدة ملفات في نفس الوقت.
       </p>
 
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 bg-slate-800/50 px-4 py-2 rounded-xl text-xs text-slate-400">
+        <div className="flex items-center gap-2 bg-slate-800/30 px-4 py-2 rounded-xl text-xs text-slate-400">
           <FileType size={14} />
           <span>تنسيق مدعوم: .svga</span>
         </div>

@@ -249,7 +249,7 @@ export const VideoToSVGA: React.FC = () => {
   return (
     <div className="flex flex-col gap-8">
       {!videoFile ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-12 flex flex-col items-center justify-center min-h-[400px]">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl p-12 flex flex-col items-center justify-center min-h-[400px]">
           <input type="file" id="video-upload" accept="video/*" className="hidden" onChange={handleFileSelect} />
           <label htmlFor="video-upload" className="cursor-pointer flex flex-col items-center group">
             <div className="bg-indigo-600/20 p-6 rounded-full mb-6 group-hover:scale-110 transition-transform">
@@ -261,15 +261,15 @@ export const VideoToSVGA: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-6 flex flex-col items-center">
+          <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl p-6 flex flex-col items-center">
             <h3 className="text-lg font-bold text-white mb-4 w-full text-right">المعاينة المباشرة</h3>
-            <div className="relative w-full bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center aspect-video border border-slate-800 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]">
+            <div className="relative w-full bg-slate-950/50 rounded-2xl overflow-hidden flex items-center justify-center aspect-video border border-slate-800 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]">
               <video ref={videoRef} src={videoUrl} className="hidden" loop autoPlay muted playsInline />
               <canvas ref={canvasRef} className="max-w-full max-h-full object-contain drop-shadow-2xl" />
             </div>
           </div>
           
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col gap-6">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-[2.5rem] p-6 flex flex-col gap-6">
             <div className="flex items-center gap-3 text-indigo-400 border-b border-slate-800 pb-4">
               <Settings size={20} />
               <h3 className="font-bold text-lg">إعدادات التحويل</h3>
@@ -342,7 +342,7 @@ export const VideoToSVGA: React.FC = () => {
               <button 
                 onClick={convertToSVGA}
                 disabled={isConverting}
-                className="w-full py-4 bg-indigo-500/20 hover:bg-indigo-500/30 backdrop-blur-md border border-indigo-500/30 text-indigo-300 rounded-xl font-bold text-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100 shadow-[0_0_20px_rgba(99,102,241,0.1)]"
+                className="w-full py-4 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 text-indigo-300 rounded-xl font-bold text-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100 shadow-[0_0_20px_rgba(99,102,241,0.1)]"
               >
                 {isConverting ? (
                   <>
@@ -360,7 +360,7 @@ export const VideoToSVGA: React.FC = () => {
               <button 
                 onClick={() => { setVideoFile(null); setVideoUrl(''); }}
                 disabled={isConverting}
-                className="w-full mt-3 py-3 bg-slate-700/30 hover:bg-slate-700/50 backdrop-blur-md border border-slate-700/50 text-slate-300 rounded-xl font-semibold transition-all disabled:opacity-50"
+                className="w-full mt-3 py-3 bg-slate-700/30 hover:bg-slate-700/50 border border-slate-700/50 text-slate-300 rounded-xl font-semibold transition-all disabled:opacity-50"
               >
                 إلغاء واختيار فيديو آخر
               </button>

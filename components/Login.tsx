@@ -1,210 +1,218 @@
 
-import React, { useState, useEffect } from 'react';
-import { auth, db } from '../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState } from 'react';
+import { useAuth } from './AuthContext';
+import { LogIn, Sparkles, ShieldCheck, Zap, Mail, Lock, User as UserIcon, ArrowRight, AlertCircle, Loader2, ShieldAlert, LogOut } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { DynamicBackground } from './DynamicBackground';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
+  banInfo?: any;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [isLogin, setIsLogin] = useState(true);
+export const Login: React.FC<LoginProps> = ({ banInfo }) => {
+  const { loginWithEmail, signupWithEmail, logout, appSettings } = useAuth();
+  const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); 
+  const [name, setName] = useState('');
   const [error, setError] = useState('');
-  const [customBg, setCustomBg] = useState<string | null>(null);
-  const [customLogo, setCustomLogo] = useState<string | null>(null);
-
-  const [isPageReady, setIsPageReady] = useState(false);
-  const [isBgLoaded, setIsBgLoaded] = useState(false);
-  const [isLogoLoaded, setIsLogoLoaded] = useState(false);
-  const [hasFetchedData, setHasFetchedData] = useState(false);
-
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, "settings", "appearance"), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setCustomBg(data.loginBackground || null);
-        setCustomLogo(data.loginLogo || null);
-        if (!data.loginBackground) setIsBgLoaded(true);
-        if (!data.loginLogo) setIsLogoLoaded(true);
-      } else {
-        setIsBgLoaded(true);
-        setIsLogoLoaded(true);
-      }
-      setHasFetchedData(true);
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    if (hasFetchedData && isBgLoaded && isLogoLoaded) {
-      const timer = setTimeout(() => setIsPageReady(true), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [hasFetchedData, isBgLoaded, isLogoLoaded]);
-
-  const isVideoUrl = (url: string | null) => {
-    if (!url) return false;
-    return url.match(/\.(mp4|webm|ogg|mov)$/) !== null || url.includes('video');
-  };
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    if (!email || !password) {
-      setError("يرجى إدخال البيانات");
-      return;
-    }
-    
     setIsLoading(true);
+
     try {
-      if (isLogin) {
-        try {
-          const userCredential = await signInWithEmailAndPassword(auth, email, password);
-          const user = userCredential.user;
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            if (data.banUntil) {
-              const banDate = new Date(data.banUntil);
-              const now = new Date();
-              if (banDate > now) {
-                await signOut(auth);
-                setError("لقد تم حظر حسابك يرجى الاتصال بالمسؤول لحل المشكله");
-                setIsLoading(false);
-                return;
-              }
-            }
-          }
-        } catch (authErr: any) {
-          console.error(authErr.code);
-          if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-email') {
-            setError('الإيميل غير صحيح');
-          } else if (authErr.code === 'auth/wrong-password') {
-            setError('الباسورد غير صحيح');
-          } else {
-            setError('حدث خطأ في الدخول، تأكد من البيانات');
-          }
-          setIsLoading(false);
-          return;
-        }
+      if (isSignup) {
+        if (!name) throw new Error('يرجى إدخال الاسم');
+        await signupWithEmail(email, password, name);
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        await loginWithEmail(email, password);
       }
-      onLoginSuccess();
     } catch (err: any) {
-      console.error(err);
-      setError('حدث خطأ غير متوقع');
+      let msg = 'حدث خطأ ما، يرجى المحاولة لاحقاً';
+      if (err.code === 'auth/user-not-found') msg = 'المستخدم غير موجود';
+      if (err.code === 'auth/wrong-password') msg = 'كلمة المرور غير صحيحة';
+      if (err.code === 'auth/email-already-in-use') msg = 'البريد الإلكتروني مستخدم بالفعل';
+      if (err.code === 'auth/invalid-email') msg = 'البريد الإلكتروني غير صالح';
+      if (err.code === 'auth/weak-password') msg = 'كلمة المرور ضعيفة جداً';
+      if (err.code === 'auth/unauthorized-domain') {
+        msg = 'هذا النطاق غير مصرح به. يرجى إضافة الروابط التالية في Firebase Console (Authentication > Settings > Authorized domains): \n 1. ais-dev-xuikx6qoswp5tssoqiyhos-75015451145.europe-west2.run.app \n 2. ais-pre-xuikx6qoswp5tssoqiyhos-75015451145.europe-west2.run.app';
+      }
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen max-w-md mx-auto bg-[#1a0b2e] flex flex-col justify-center px-6 relative overflow-hidden text-purple-50" dir="rtl">
-      <AnimatePresence>
-        {!isPageReady && (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 overflow-hidden relative font-sans" dir="rtl">
+      {/* Dynamic Background */}
+      <DynamicBackground url={appSettings?.loginBgURL} overlayOpacity={0.7} />
+
+      {/* Background Decorations (Fallback/Extra) */}
+      {!appSettings?.loginBgURL && (
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] animate-pulse"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03]"></div>
+        </div>
+      )}
+
+      <motion.div 
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        className="max-w-md w-full bg-slate-900/70 border border-slate-800/50 rounded-[2.5rem] p-6 md:p-10 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] relative z-10"
+      >
+        <div className="text-center mb-8">
           <motion.div 
-            initial={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
-            className="fixed inset-0 z-[100] bg-[#1a0b2e] flex items-center justify-center"
+            whileHover={{ scale: 1.05, rotate: 5 }}
+            className="inline-flex items-center justify-center w-20 h-20 rounded-[1.5rem] bg-blue-600/10 border border-blue-500/30 mb-6 shadow-2xl shadow-blue-600/10 relative group backdrop-blur-xl overflow-hidden"
           >
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin"></div>
-              <p className="text-[10px] font-black text-purple-400 uppercase tracking-[0.3em]">Yalla Games</p>
-            </div>
+            {appSettings?.logoURL && (
+              <img src={appSettings.logoURL} alt="Logo" className="w-full h-full object-cover" />
+            )}
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className={`transition-opacity duration-700 ${isPageReady ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="absolute inset-0 z-0">
-          {customBg ? (
-            <>
-              {isVideoUrl(customBg) ? (
-                <video src={customBg} autoPlay loop muted playsInline onCanPlayThrough={() => setIsBgLoaded(true)} className="w-full h-full object-cover" />
-              ) : (
-                <img src={customBg} onLoad={() => setIsBgLoaded(true)} className="w-full h-full object-cover" alt="Background" />
-              )}
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"></div>
-              <div className="absolute top-0 left-0 right-0 h-56 bg-gradient-to-b from-black via-black/40 to-transparent"></div>
-            </>
-          ) : (
-            <>
-              <div className="absolute top-[-5%] right-[-10%] w-64 h-64 bg-purple-600/10 rounded-full blur-[80px]"></div>
-              <div className="absolute bottom-[-5%] left-[-10%] w-64 h-64 bg-pink-600/10 rounded-full blur-[80px]"></div>
-            </>
-          )}
-        </div>
-
-        <div className="z-10 text-center mb-10 relative">
-          <div className="w-24 h-24 bg-gradient-to-tr from-purple-600 to-pink-500 rounded-full mx-auto flex items-center justify-center shadow-2xl mb-6 border-2 border-white/20 overflow-hidden bg-white/5 p-0">
-            {customLogo ? (
-              <img src={customLogo} onLoad={() => setIsLogoLoaded(true)} className="w-full h-full object-cover scale-100" alt="App Logo" />
-            ) : (
-              <i className="fas fa-gamepad text-3xl text-white"></i>
-            )}
+          <div className="flex flex-col items-center mb-4" dir="ltr">
+            <h1 className="text-4xl font-black tracking-tighter text-white leading-none flex items-center gap-1">
+              Flex <span className="text-blue-500">Studio</span>
+            </h1>
+            <span className="text-[10px] font-black text-blue-500/80 tracking-[0.4em] uppercase mt-2">Pro Edition</span>
           </div>
-          <h1 className="text-4xl font-black mb-2 tracking-tighter bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent italic">Yalla Games</h1>
-          <p className="text-purple-400/60 text-[10px] font-black uppercase tracking-[0.3em]">عالم الترفيه والدردشة</p>
+          <p className="text-slate-400 text-xs leading-relaxed max-w-xs mx-auto">
+            {isSignup ? 'أنشئ حسابك الجديد للبدء في عالم الإبداع' : 'مرحباً بك مجدداً، سجل دخولك للمتابعة'}
+          </p>
         </div>
 
-        <div className="z-10 w-full max-w-[340px] mx-auto relative">
-          <AnimatePresence mode="wait">
-            {!showEmailForm ? (
-              <motion.div key="options" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="space-y-4">
-                <button type="button" onClick={() => setShowEmailForm(true)} className="w-full bg-white/10 backdrop-blur-md border border-white/20 h-14 rounded-full flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all group">
-                  <i className="fas fa-envelope text-white text-sm"></i>
-                  <span className="text-white font-black text-sm">تسجيل الدخول بالبريد الإلكتروني</span>
-                </button>
-              </motion.div>
-            ) : (
-              <motion.div key="form" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white/5 backdrop-blur-2xl border border-white/10 p-6 rounded-[2.5rem] shadow-2xl">
-                <div className="flex justify-between items-center mb-6">
-                  <button onClick={() => setShowEmailForm(false)} className="text-white/40 hover:text-white transition-colors"><i className="fas fa-arrow-right"></i></button>
-                  <h3 className="text-white font-black text-sm">{isLogin ? 'دخول بالبريد' : 'إنشاء حساب جديد'}</h3>
-                  <div className="w-4"></div>
+        <AnimatePresence mode="wait">
+          {banInfo ? (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mb-8 p-6 bg-red-500/10 border border-red-500/20 rounded-[2rem] text-center relative overflow-hidden group"
+            >
+              <div className="absolute top-0 right-0 w-20 h-20 bg-red-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
+              <ShieldAlert className="text-red-500 mx-auto mb-4" size={32} />
+              <h2 className="text-lg font-black text-white mb-2">عذراً، لقد تم حظر حسابك</h2>
+              <p className="text-slate-400 text-[10px] leading-relaxed mb-4">
+                لا يمكنك تسجيل الدخول إلى المنصة في الوقت الحالي بسبب مخالفة القوانين.
+              </p>
+              
+              {banInfo.banUntil ? (
+                <div className="bg-slate-950/50 rounded-xl p-3 border border-red-500/10 mb-4">
+                  <p className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">تاريخ انتهاء الحظر</p>
+                  <p className="text-xs font-bold text-red-400">
+                    {banInfo.banUntil.toDate().toLocaleString('ar-EG', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {error && (
-                    <div className="bg-red-500/10 text-red-400 text-[10px] p-3 rounded-xl text-center font-bold border border-red-500/20 leading-relaxed">
-                      {error}
-                    </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <label className="block text-[9px] font-black text-purple-400/60 mr-2 uppercase">البريد الإلكتروني</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-full py-3.5 px-6 text-xs text-white outline-none focus:border-purple-500/40 transition-all" placeholder="mail@example.com" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-[9px] font-black text-purple-400/60 mr-2 uppercase">كلمة المرور</label>
-                    <div className="relative">
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/40 text-xs"><i className={`fas ${showPassword ? 'fa-eye' : 'fa-eye-slash'}`}></i></button>
-                      <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-full py-3.5 pl-12 pr-6 text-xs text-white outline-none focus:border-purple-500/40 transition-all" placeholder="••••••••" />
-                    </div>
-                  </div>
-                  <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-full font-black text-xs text-white shadow-lg active:scale-95 transition-all mt-4 border border-white/10">
-                    {isLoading ? <i className="fas fa-circle-notch animate-spin"></i> : (isLogin ? 'تسجيل الدخول' : 'إنشاء حساب')}
-                  </button>
-                </form>
-                <div className="mt-6 text-center">
-                  <button onClick={() => setIsLogin(!isLogin)} className="text-[10px] text-purple-400/60 font-bold hover:text-purple-300 transition-colors">{isLogin ? 'ليس لديك حساب؟ سجل الآن' : 'لديك حساب بالفعل؟ ادخل هنا'}</button>
+              ) : (
+                <div className="bg-slate-950/50 rounded-xl p-3 border border-red-500/10 mb-4">
+                  <p className="text-xs font-bold text-red-400">هذا الحظر دائم</p>
                 </div>
-              </motion.div>
+              )}
+
+              <button 
+                onClick={logout}
+                className="w-full py-3 bg-slate-800 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 group/btn"
+              >
+                <LogOut size={14} className="group-hover/btn:rotate-180 transition-transform" />
+                تسجيل الخروج للمحاولة بحساب آخر
+              </button>
+            </motion.div>
+          ) : error ? (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400 text-xs font-bold"
+            >
+              <AlertCircle size={18} />
+              {error}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        {!banInfo && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {isSignup && (
+              <div className="group">
+                <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl px-4 focus-within:border-blue-500/50 transition-all duration-300">
+                  <UserIcon className="text-slate-500 group-focus-within:text-blue-400 transition-colors shrink-0" size={18} />
+                  <input 
+                    type="text" 
+                    placeholder="الاسم الكامل" 
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="flex-1 bg-transparent !bg-transparent border-none py-4 pr-3 pl-0 text-white placeholder-slate-500 focus:outline-none text-sm"
+                  />
+                </div>
+              </div>
             )}
-          </AnimatePresence>
-        </div>
-        <div className="mt-12 text-center px-10 z-10 relative">
-          <p className="text-[9px] font-bold text-purple-300/30 leading-relaxed uppercase tracking-widest">من خلال المتابعة، أنت توافق على شروط الخدمة وسياسة الخصوصية</p>
-        </div>
-      </div>
+            
+            <div className="group">
+              <div className="flex items-center bg-white/5 border border-white/10 rounded-xl px-4 focus-within:border-blue-500/50 transition-all duration-300">
+                <Mail className="text-slate-500 group-focus-within:text-blue-400 transition-colors shrink-0" size={18} />
+                <input 
+                  type="email" 
+                  placeholder="البريد الإلكتروني" 
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="flex-1 bg-transparent !bg-transparent border-none py-4 pr-3 pl-0 text-white placeholder-slate-500 focus:outline-none text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="group">
+              <div className="flex items-center bg-white/5 border border-white/10 rounded-xl px-4 focus-within:border-blue-500/50 transition-all duration-300">
+                <Lock className="text-slate-500 group-focus-within:text-blue-400 transition-colors shrink-0" size={18} />
+                <input 
+                  type="password" 
+                  placeholder="كلمة المرور" 
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="flex-1 bg-transparent !bg-transparent border-none py-4 pr-3 pl-0 text-white placeholder-slate-500 focus:outline-none text-sm"
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              disabled={isLoading}
+              className="w-full group relative flex items-center justify-center gap-3 py-4 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-xl font-black text-base transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            >
+              {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
+                <>
+                  {isSignup ? 'إنشاء حساب' : 'تسجيل الدخول'}
+                  <ArrowRight size={18} className="group-hover:translate-x-[-4px] transition-transform" />
+                </>
+              )}
+            </button>
+          </form>
+        )}
+
+        {!banInfo && (
+          <div className="mt-6 text-center">
+            <button 
+              onClick={() => { setIsSignup(!isSignup); setError(''); }}
+              className="text-xs text-slate-400 hover:text-blue-400 transition-colors font-medium"
+            >
+              {isSignup ? 'لديك حساب بالفعل؟ سجل دخولك' : 'ليس لديك حساب؟ أنشئ حساباً جديداً'}
+            </button>
+          </div>
+        )}
+      </motion.div>
     </div>
   );
 };
+

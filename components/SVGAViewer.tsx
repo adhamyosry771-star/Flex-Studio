@@ -9,7 +9,15 @@ import {
   Video,
   Eye,
   EyeOff,
-  RefreshCw
+  RefreshCw,
+  X,
+  Settings2,
+  Check,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  Minimize2,
+  RotateCcw
 } from 'lucide-react';
 import pako from 'pako';
 import { parse } from 'protobufjs';
@@ -29,9 +37,12 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
   const [status, setStatus] = useState<PlayerStatus>(PlayerStatus.LOADING);
   const [isLoop] = useState(true);
   const [bgColor, setBgColor] = useState('#0f172a');
+  const [isMuted, setIsMuted] = useState(false);
+  const [hasAudio, setHasAudio] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [totalFrames, setTotalFrames] = useState(0);
+  const [videoSize, setVideoSize] = useState<{width: number, height: number} | null>(null);
   const [assets, setAssets] = useState<{id: string, data: string}[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -41,12 +52,42 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
   const [activeReplaceId, setActiveReplaceId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [editingAsset, setEditingAsset] = useState<{
+    id: string;
+    originalData: string;
+    newImageData: string;
+  } | null>(null);
+
+  const [editSettings, setEditSettings] = useState({
+    scale: 100,
+    offsetX: 0,
+    offsetY: 0,
+    glowIntensity: 0,
+    solidFill: 0,
+    glowColor: '#ffffff',
+    smartMatch: true
+  });
+
+  const editCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const bgOptions = [
     { label: 'داكن', value: '#0f172a' },
     { label: 'أخضر', value: '#14532d' },
     { label: 'أبيض', value: '#ffffff' },
     { label: 'شفاف', value: 'transparent' },
   ];
+
+  // Auto-resume audio context on any click in the document
+  useEffect(() => {
+    const resumeAudio = () => {
+      if (playerRef.current?.audioPlayer?.context?.state === 'suspended') {
+        playerRef.current.audioPlayer.context.resume();
+      }
+    };
+    window.addEventListener('click', resumeAudio);
+    return () => window.removeEventListener('click', resumeAudio);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -67,6 +108,11 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
         player.setContentMode('AspectFit'); 
         player.loops = isLoop ? 0 : 1;
         player.clearsAfterStop = false;
+        
+        // Audio handling
+        if (player.setAudioMuted) {
+          player.setAudioMuted(isMuted);
+        }
 
         player.onFrame((frame: number) => {
           if (isMounted) {
@@ -96,9 +142,22 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
             setAssets(extracted);
           }
           videoItemRef.current = videoItem;
+          setHasAudio(!!(videoItem.audios && videoItem.audios.length > 0));
+          setVideoSize({
+            width: videoItem.videoSize.width,
+            height: videoItem.videoSize.height
+          });
           setTotalFrames(videoItem.frames);
           player.setVideoItem(videoItem);
           player.startAnimation();
+          
+          // Try to play audio immediately if possible
+          try {
+            if (player.audioPlayer?.context?.state === 'suspended') {
+              player.audioPlayer.context.resume();
+            }
+          } catch (e) {}
+
           playerRef.current = player;
           setStatus(PlayerStatus.PLAYING);
         }, () => {
@@ -122,81 +181,167 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
     return bytes;
   };
 
-  const processReplacement = (assetId: string, originalDataUrl: string, newFile: File) => {
-    const newUrl = URL.createObjectURL(newFile);
-    
-    const origImg = new Image();
-    origImg.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = origImg.width;
-      canvas.height = origImg.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.drawImage(origImg, 0, 0);
-      
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imgData.data;
-      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-      let hasPixels = false;
-
-      for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-          const alpha = data[(y * canvas.width + x) * 4 + 3];
-          if (alpha > 10) {
-            hasPixels = true;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-          }
-        }
-      }
-
-      const bbox = hasPixels 
-        ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }
-        : { x: 0, y: 0, w: origImg.width, h: origImg.height };
-
-      const newImg = new Image();
-      newImg.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        const scale = Math.min(bbox.w / newImg.width, bbox.h / newImg.height);
-        const drawW = newImg.width * scale;
-        const drawH = newImg.height * scale;
-        const drawX = bbox.x + (bbox.w - drawW) / 2;
-        const drawY = bbox.y + (bbox.h - drawH) / 2;
-
-        ctx.drawImage(newImg, drawX, drawY, drawW, drawH);
-        
-        const resultDataUrl = canvas.toDataURL('image/png');
-        
-        setReplacedAssets(prev => ({ ...prev, [assetId]: resultDataUrl }));
-        
-        if (playerRef.current) {
-          playerRef.current.setImage(resultDataUrl, assetId);
-        }
-      };
-      newImg.src = newUrl;
-    };
-    origImg.src = originalDataUrl;
-  };
-
   const handleReplaceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && activeReplaceId) {
       const originalAsset = assets.find(a => a.id === activeReplaceId);
       if (originalAsset) {
-        processReplacement(activeReplaceId, originalAsset.data, file);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setEditingAsset({
+            id: activeReplaceId,
+            originalData: originalAsset.data,
+            newImageData: event.target?.result as string
+          });
+          setEditSettings({
+            scale: 100,
+            offsetX: 0,
+            offsetY: 0,
+            glowIntensity: 0,
+            solidFill: 0,
+            glowColor: '#ffffff',
+            smartMatch: true
+          });
+        };
+        reader.readAsDataURL(file);
       }
     }
     if (e.target) e.target.value = '';
     setActiveReplaceId(null);
   };
 
+  useEffect(() => {
+    if (!editingAsset || !editCanvasRef.current) return;
+    
+    const origImg = new Image();
+    origImg.onload = () => {
+      const canvas = editCanvasRef.current!;
+      canvas.width = origImg.width;
+      canvas.height = origImg.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      let bbox = { x: 0, y: 0, w: origImg.width, h: origImg.height };
+      if (editSettings.smartMatch) {
+        ctx.drawImage(origImg, 0, 0);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+        let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+        let hasPixels = false;
+        for (let y = 0; y < canvas.height; y++) {
+          for (let x = 0; x < canvas.width; x++) {
+            if (data[(y * canvas.width + x) * 4 + 3] > 10) {
+              hasPixels = true;
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (hasPixels) {
+          bbox = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
+      const newImg = new Image();
+      newImg.onload = () => {
+        let drawW = newImg.width;
+        let drawH = newImg.height;
+        let drawX = 0;
+        let drawY = 0;
+
+        if (editSettings.smartMatch) {
+          const scale = Math.min(bbox.w / newImg.width, bbox.h / newImg.height) * (editSettings.scale / 100);
+          drawW = newImg.width * scale;
+          drawH = newImg.height * scale;
+          drawX = bbox.x + (bbox.w - drawW) / 2 + editSettings.offsetX;
+          drawY = bbox.y + (bbox.h - drawH) / 2 + editSettings.offsetY;
+        } else {
+          const scale = editSettings.scale / 100;
+          drawW = newImg.width * scale;
+          drawH = newImg.height * scale;
+          drawX = (canvas.width - drawW) / 2 + editSettings.offsetX;
+          drawY = (canvas.height - drawH) / 2 + editSettings.offsetY;
+        }
+
+        if (editSettings.glowIntensity > 0) {
+          ctx.shadowColor = editSettings.glowColor;
+          ctx.shadowBlur = editSettings.glowIntensity;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          ctx.drawImage(newImg, drawX, drawY, drawW, drawH);
+          ctx.drawImage(newImg, drawX, drawY, drawW, drawH);
+        } else {
+          ctx.drawImage(newImg, drawX, drawY, drawW, drawH);
+        }
+
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+
+        if (editSettings.solidFill > 0) {
+          ctx.globalCompositeOperation = 'source-atop';
+          ctx.fillStyle = editSettings.glowColor;
+          ctx.globalAlpha = editSettings.solidFill / 100;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
+        const dataUrl = canvas.toDataURL('image/png');
+        setPreviewUrl(dataUrl);
+        if (playerRef.current) {
+          playerRef.current.setImage(dataUrl, editingAsset.id);
+        }
+      };
+      newImg.src = editingAsset.newImageData;
+    };
+    origImg.src = editingAsset.originalData;
+  }, [editingAsset, editSettings]);
+
+  const applyEdit = () => {
+    if (previewUrl && editingAsset) {
+      setReplacedAssets(prev => ({ ...prev, [editingAsset.id]: previewUrl }));
+    }
+    setEditingAsset(null);
+  };
+
+  const cancelEdit = () => {
+    if (editingAsset && playerRef.current) {
+      const previousData = replacedAssets[editingAsset.id] || editingAsset.originalData;
+      playerRef.current.setImage(previousData, editingAsset.id);
+    }
+    setEditingAsset(null);
+  };
+
   const togglePlay = () => {
     if (!playerRef.current) return;
+    
+    // Resume audio context if suspended (browser requirement)
+    try {
+      if (playerRef.current.audioPlayer && playerRef.current.audioPlayer.context) {
+        if (playerRef.current.audioPlayer.context.state === 'suspended') {
+          playerRef.current.audioPlayer.context.resume();
+        }
+      }
+    } catch (e) {
+      console.warn("Audio context resume failed", e);
+    }
+
     status === PlayerStatus.PLAYING ? playerRef.current.pauseAnimation() : playerRef.current.resumeAnimation();
     setStatus(status === PlayerStatus.PLAYING ? PlayerStatus.PAUSED : PlayerStatus.PLAYING);
+  };
+
+  const toggleMute = () => {
+    if (!playerRef.current) return;
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    if (playerRef.current.setAudioMuted) {
+      playerRef.current.setAudioMuted(newMuted);
+    }
   };
 
   const toggleAssetVisibility = (assetId: string) => {
@@ -554,7 +699,7 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
         });
 
         Object.entries(replacedAssets).forEach(([assetId, dataUrl]) => {
-          const bytes = base64ToUint8Array(dataUrl);
+          const bytes = base64ToUint8Array(dataUrl as string);
           const possibleNames = [assetId, `${assetId}.png`, `${assetId}.jpg`, `${assetId}.jpeg`];
           let found = false;
           for (const name of possibleNames) {
@@ -596,7 +741,7 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
           });
           Object.entries(replacedAssets).forEach(([assetId, dataUrl]) => {
             if (message.images[assetId]) {
-              message.images[assetId] = base64ToUint8Array(dataUrl);
+              message.images[assetId] = base64ToUint8Array(dataUrl as string);
             }
           });
         }
@@ -630,10 +775,10 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-950">
+    <div className="flex flex-col bg-slate-950/40 w-full overflow-hidden">
       {exporting && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/98 backdrop-blur-3xl flex items-center justify-center p-6 text-right" dir="rtl">
-          <div className="max-w-md w-full bg-slate-900 p-10 rounded-[2.5rem] border border-blue-500/20 shadow-2xl">
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 flex items-center justify-center p-6 text-right" dir="rtl">
+          <div className="max-w-md w-full bg-slate-900/60 p-10 rounded-[2.5rem] border border-blue-500/20 shadow-2xl">
             <div className="flex items-center justify-between mb-10">
                 <div className="w-16 h-16 border-4 border-blue-500/10 border-t-blue-500 rounded-full animate-spin flex items-center justify-center">
                     <FileArchive size={20} className="text-blue-500" />
@@ -665,10 +810,11 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
         </div>
       )}
 
-      <div className="flex flex-col h-[500px] md:h-[600px] bg-slate-900 overflow-hidden shadow-2xl relative">
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/95 z-30">
+      <div className="flex flex-col h-[750px] bg-slate-900/50 overflow-hidden shadow-2xl relative border border-slate-800/50 rounded-[2.5rem]">
+        <div className="px-8 py-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/50 z-30">
           <div className="flex items-center gap-3">
-            <h4 className="text-sm font-semibold text-white truncate max-w-[200px]">{file.name}</h4>
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+            <h4 className="text-sm font-bold text-white truncate max-w-[250px]">{file.name}</h4>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
              <button 
@@ -702,48 +848,66 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
           </div>
         </div>
 
-        <div className="flex-1 relative transition-colors duration-500" style={{ backgroundColor: bgColor }}>
+        <div className="flex-1 relative transition-colors duration-500 flex items-center justify-center m-4 rounded-[2rem] border border-slate-800/30 overflow-hidden" style={{ backgroundColor: bgColor }}>
           {status === PlayerStatus.LOADING && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10 bg-slate-900/50">
               <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
               <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">جاري تهيئة العرض...</p>
             </div>
           )}
-          <div id="svga-player-container" ref={containerRef} className="w-full h-full pointer-events-none" />
+          <div 
+            ref={containerRef} 
+            className="w-full h-full pointer-events-none" 
+          />
         </div>
 
-        <div className="p-5 bg-slate-950/95 border-t border-slate-800/50 z-30">
-          <div className="max-w-4xl mx-auto flex flex-col gap-4">
+        <div className="p-8 bg-slate-900/50 border-t border-slate-800 z-30">
+          <div className="max-w-5xl mx-auto flex flex-col gap-6">
             <div className="flex items-center gap-4">
-              <span className="text-[10px] font-mono text-slate-500 w-12 text-center">{currentFrame} / {totalFrames}</span>
-              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 transition-all duration-100" style={{ width: `${progress}%` }}></div>
+              <span className="text-[10px] font-mono text-slate-500 w-14 text-center bg-slate-900 py-1 rounded-md border border-slate-800">{currentFrame} / {totalFrames}</span>
+              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/30">
+                <div className="h-full bg-gradient-to-l from-blue-600 to-blue-400 shadow-[0_0_10px_rgba(37,99,235,0.3)] transition-all duration-100" style={{ width: `${progress}%` }}></div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button onClick={togglePlay} className="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-600 text-white hover:bg-blue-500 transition-all active:scale-90 shadow-lg shadow-blue-600/20">
-                  {status === PlayerStatus.PLAYING ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={togglePlay} 
+                  className="w-16 h-16 flex items-center justify-center rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all active:scale-95 group"
+                  title={status === PlayerStatus.PLAYING ? "إيقاف مؤقت" : "تشغيل"}
+                >
+                  {status === PlayerStatus.PLAYING ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
                 </button>
               </div>
               
-              <div className="flex gap-1 bg-slate-900 p-1 rounded-lg">
-                {bgOptions.map(opt => (
-                  <button key={opt.value} onClick={() => setBgColor(opt.value)} className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-all ${bgColor === opt.value ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>
-                    {opt.label}
-                  </button>
-                ))}
+              <div className="flex flex-col items-center sm:items-end gap-3">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">لون خلفية العرض</span>
+                <div className="flex gap-2 bg-slate-900/20 p-2 rounded-2xl border border-slate-800/50">
+                  {bgOptions.map(opt => (
+                    <button 
+                      key={opt.value} 
+                      onClick={() => setBgColor(opt.value)} 
+                      className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 ${
+                        bgColor === opt.value 
+                          ? 'bg-blue-500/20 border border-blue-500/30 text-blue-400' 
+                          : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 p-8">
+      <div className="flex-1 p-8 bg-slate-900/50 border border-slate-800 rounded-[2.5rem] mt-8">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-3 mb-10 border-b border-slate-800 pb-5">
-            <div className="p-2 bg-indigo-500/10 rounded-lg">
+            <div className="p-2 bg-indigo-500/10 rounded-xl">
               <Layers className="text-indigo-400" size={20} />
             </div>
             <div>
@@ -766,14 +930,14 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
               const displayData = replacedAssets[asset.id] || asset.data;
               
               return (
-              <div key={asset.id + idx} className={`group relative bg-slate-900 rounded-2xl border ${isHidden ? 'border-red-500/50 opacity-50' : isReplaced ? 'border-green-500/50' : 'border-slate-800 hover:border-indigo-500/50'} overflow-hidden transition-all duration-300`}>
+              <div key={asset.id + idx} className={`group relative bg-slate-900/40 rounded-[2rem] border ${isHidden ? 'border-red-500/50 opacity-50' : isReplaced ? 'border-green-500/50' : 'border-slate-800 hover:border-indigo-500/50'} overflow-hidden transition-all duration-300`}>
                 <div className="aspect-square relative bg-slate-800/30 p-4 flex items-center justify-center overflow-hidden">
                   <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')]"></div>
                   <img src={displayData} alt={asset.id} className={`relative max-w-full max-h-full object-contain drop-shadow-xl transition-transform duration-500 ${isHidden ? 'grayscale' : 'group-hover:scale-110'}`} />
-                  <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                      <button 
                        onClick={() => toggleAssetVisibility(asset.id)} 
-                       className={`p-2.5 rounded-full text-white backdrop-blur-md transition-all active:scale-90 ${isHidden ? 'bg-green-500/20 hover:bg-green-500/40' : 'bg-red-500/20 hover:bg-red-500/40'}`}
+                       className={`p-2.5 rounded-full text-white transition-all active:scale-90 ${isHidden ? 'bg-green-500/20 hover:bg-green-500/40' : 'bg-red-500/20 hover:bg-red-500/40'}`}
                        title={isHidden ? "استرجاع القطعة" : "إخفاء القطعة"}
                      >
                       {isHidden ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -783,14 +947,14 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
                          setActiveReplaceId(asset.id);
                          fileInputRef.current?.click();
                        }} 
-                       className="p-2.5 bg-blue-500/20 hover:bg-blue-500/40 rounded-full text-white backdrop-blur-md transition-all active:scale-90"
+                       className="p-2.5 bg-blue-500/20 hover:bg-blue-500/40 rounded-full text-white transition-all active:scale-90"
                        title="استبدال القطعة (بالمقاس الذكي)"
                      >
                       <RefreshCw size={16} />
                      </button>
                      <button 
                        onClick={() => { const l=document.createElement('a'); l.href=displayData; l.download=`${asset.id}.png`; l.click(); }} 
-                       className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-all active:scale-90"
+                       className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all active:scale-90"
                        title="تحميل القطعة"
                      >
                       <Download size={16} />
@@ -805,6 +969,118 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editingAsset && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/60" dir="rtl">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
+            {/* Preview Area */}
+            <div className="flex-1 p-6 flex flex-col items-center justify-center bg-slate-950/50 border-b md:border-b-0 md:border-l border-slate-800">
+              <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                <Eye size={18} className="text-indigo-400" />
+                معاينة القطعة
+              </h3>
+              <div className="relative w-full max-w-sm aspect-square bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] bg-slate-900 border border-slate-700 rounded-xl overflow-hidden flex items-center justify-center p-4">
+                {previewUrl && <img src={previewUrl} className="max-w-full max-h-full object-contain drop-shadow-xl" alt="Preview" />}
+              </div>
+              <p className="text-slate-500 text-xs mt-4 text-center">
+                يتم تحديث العرض المباشر في مشغل SVGA تلقائياً لرؤية النتيجة
+              </p>
+            </div>
+
+            {/* Controls Area */}
+            <div className="w-full md:w-96 p-6 flex flex-col gap-6 max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                  <Settings2 size={18} className="text-pink-400" />
+                  إعدادات الاستبدال
+                </h3>
+                <button onClick={cancelEdit} className="text-slate-400 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-5">
+                {/* Smart Match Toggle */}
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <span className="text-sm text-slate-300 group-hover:text-white transition-colors">المطابقة الذكية (للحجم والمكان)</span>
+                  <div className="relative">
+                    <input type="checkbox" className="sr-only peer" checked={editSettings.smartMatch} onChange={(e) => setEditSettings(s => ({...s, smartMatch: e.target.checked}))} />
+                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+                  </div>
+                </label>
+
+                {/* Scale */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between text-sm">
+                    <label className="text-slate-300">الحجم (Scale)</label>
+                    <span className="text-indigo-400 font-mono">{editSettings.scale}%</span>
+                  </div>
+                  <input type="range" min="10" max="200" value={editSettings.scale} onChange={(e) => setEditSettings(s => ({...s, scale: Number(e.target.value)}))} className="w-full accent-indigo-500" />
+                </div>
+
+                {/* X Offset */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between text-sm">
+                    <label className="text-slate-300">إزاحة أفقية (X)</label>
+                    <span className="text-indigo-400 font-mono">{editSettings.offsetX}px</span>
+                  </div>
+                  <input type="range" min="-200" max="200" value={editSettings.offsetX} onChange={(e) => setEditSettings(s => ({...s, offsetX: Number(e.target.value)}))} className="w-full accent-indigo-500" />
+                </div>
+
+                {/* Y Offset */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between text-sm">
+                    <label className="text-slate-300">إزاحة عمودية (Y)</label>
+                    <span className="text-indigo-400 font-mono">{editSettings.offsetY}px</span>
+                  </div>
+                  <input type="range" min="-200" max="200" value={editSettings.offsetY} onChange={(e) => setEditSettings(s => ({...s, offsetY: Number(e.target.value)}))} className="w-full accent-indigo-500" />
+                </div>
+
+                <div className="h-px bg-slate-800 w-full my-2"></div>
+
+                {/* Glow Color */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm text-slate-300">لون التأثير</label>
+                  <div className="flex gap-3 items-center">
+                    <input type="color" value={editSettings.glowColor} onChange={(e) => setEditSettings(s => ({...s, glowColor: e.target.value}))} className="w-10 h-10 rounded cursor-pointer bg-slate-900 border border-slate-700 p-1" />
+                    <span className="text-sm font-mono text-slate-400 uppercase">{editSettings.glowColor}</span>
+                  </div>
+                </div>
+
+                {/* Glow Intensity */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between text-sm">
+                    <label className="text-slate-300">قوة التوهج (Glow)</label>
+                    <span className="text-pink-400 font-mono">{editSettings.glowIntensity}</span>
+                  </div>
+                  <input type="range" min="0" max="100" value={editSettings.glowIntensity} onChange={(e) => setEditSettings(s => ({...s, glowIntensity: Number(e.target.value)}))} className="w-full accent-pink-500" />
+                </div>
+
+                {/* Solid Fill */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between text-sm">
+                    <label className="text-slate-300">تعبئة اللمعة (Solid Fill)</label>
+                    <span className="text-pink-400 font-mono">{editSettings.solidFill}%</span>
+                  </div>
+                  <input type="range" min="0" max="100" value={editSettings.solidFill} onChange={(e) => setEditSettings(s => ({...s, solidFill: Number(e.target.value)}))} className="w-full accent-pink-500" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-4">
+                <button onClick={cancelEdit} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all">
+                  إلغاء
+                </button>
+                <button onClick={applyEdit} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2">
+                  <Check size={18} />
+                  تطبيق
+                </button>
+              </div>
+            </div>
+          </div>
+          <canvas ref={editCanvasRef} className="hidden" />
+        </div>
+      )}
     </div>
   );
 };
