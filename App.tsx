@@ -14,7 +14,7 @@ import { SVGAFileInfo, SVGAFileExtended } from './types';
 import { FolderUp, History, Info, Loader2, ShieldAlert, LogOut, Ticket, MessageCircle, X, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void; mode?: 'activate' | 'extend' }> = ({ isOpen, onClose, mode = 'activate' }) => {
   const { activateCode } = useAuth();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -42,6 +42,8 @@ const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
 
   if (!isOpen) return null;
 
+  const isExtend = mode === 'extend';
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <motion.div 
@@ -68,8 +70,14 @@ const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
           <div className="w-16 h-16 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-500 mx-auto mb-4 border border-blue-500/20">
             <Ticket size={32} />
           </div>
-          <h2 className="text-2xl font-black text-white mb-2">تفعيل الاشتراك</h2>
-          <p className="text-slate-400 text-xs">لا يمكنك استخدام خدمات الموقع بدون اشتراك نشط.</p>
+          <h2 className="text-2xl font-black text-white mb-2">
+            {isExtend ? 'تمديد الاشتراك' : 'تفعيل الاشتراك'}
+          </h2>
+          <p className="text-slate-400 text-xs">
+            {isExtend 
+              ? 'يمكنك تمديد الاشتراك الخاص بك للحصول على فترة استخدام أكبر.' 
+              : 'لا يمكنك استخدام خدمات الموقع بدون اشتراك نشط.'}
+          </p>
         </div>
 
         {success ? (
@@ -79,7 +87,7 @@ const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             className="py-10 text-center"
           >
             <CheckCircle2 size={48} className="text-emerald-400 mx-auto mb-4" />
-            <p className="text-emerald-400 font-black">تم تفعيل الاشتراك بنجاح!</p>
+            <p className="text-emerald-400 font-black">تم {isExtend ? 'تمديد' : 'تفعيل'} الاشتراك بنجاح!</p>
           </motion.div>
         ) : (
           <div className="space-y-6">
@@ -101,10 +109,10 @@ const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
             <button 
               onClick={handleActivate}
               disabled={isLoading || !code.trim()}
-              className="w-full py-4 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50"
+              className="w-full py-4 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-full font-black text-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Ticket size={18} />}
-              تفعيل الكود الآن
+              {isExtend ? 'تمديد الاشتراك الآن' : 'تفعيل الكود الآن'}
             </button>
 
             <div className="pt-6 border-t border-slate-800">
@@ -132,6 +140,7 @@ const AppContent: React.FC = () => {
   const [history, setHistory] = useState<SVGAFileExtended[]>([]);
   const [currentView, setCurrentView] = useState<'viewer' | 'converter' | 'matcher' | 'admin' | 'profile'>('viewer');
   const [showSubModal, setShowSubModal] = useState(false);
+  const [subModalMode, setSubModalMode] = useState<'activate' | 'extend'>('activate');
 
   const handleViewChange = (view: any) => {
     if (view === 'profile' || view === 'admin') {
@@ -140,6 +149,7 @@ const AppContent: React.FC = () => {
     }
 
     if (!isSubscribed && !isAdmin) {
+      setSubModalMode('activate');
       setShowSubModal(true);
       return;
     }
@@ -148,6 +158,7 @@ const AppContent: React.FC = () => {
 
   const handleFilesUpload = useCallback((files: File[]) => {
     if (!isSubscribed && !isAdmin) {
+      setSubModalMode('activate');
       setShowSubModal(true);
       return;
     }
@@ -212,7 +223,10 @@ const AppContent: React.FC = () => {
           <AnimatePresence mode="wait">
             {currentView === 'profile' ? (
               <motion.div key="profile" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}>
-                <ProfilePage onBack={() => setCurrentView('viewer')} />
+                <ProfilePage onBack={() => setCurrentView('viewer')} onActivateClick={() => {
+                  setSubModalMode('extend');
+                  setShowSubModal(true);
+                }} />
               </motion.div>
             ) : currentView === 'admin' ? (
               <motion.div key="admin" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
@@ -253,13 +267,13 @@ const AppContent: React.FC = () => {
   
                     {history.length > 0 ? (
                       <div className="flex flex-col gap-3">
-                        {history.map((item, idx) => (
+                          {history.map((item, idx) => (
                           <button
                             key={`${item.name}-${idx}`}
                             onClick={() => handleHistoryClick(item)}
-                            className="flex items-center gap-3 p-3 rounded-xl border border-transparent bg-slate-800/40 hover:border-slate-700 text-slate-300 transition-all text-right group"
+                            className="flex items-center gap-3 p-3 rounded-full border border-transparent bg-slate-800/40 hover:border-slate-700 text-slate-300 transition-all text-right group"
                           >
-                            <div className="bg-slate-800 p-2 rounded-lg group-hover:bg-slate-700">
+                            <div className="bg-slate-800 p-2 rounded-full group-hover:bg-slate-700">
                               <FolderUp size={16} className="text-blue-400" />
                             </div>
                             <div className="flex-1 min-w-0">
@@ -284,7 +298,7 @@ const AppContent: React.FC = () => {
                   <h2 className="text-white font-bold">الملفات المفتوحة ({currentFiles.length})</h2>
                   <button 
                     onClick={() => document.getElementById('add-more-files')?.click()} 
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold transition-all"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-sm font-bold transition-all"
                   >
                     إضافة ملفات أخرى
                   </button>
@@ -331,7 +345,7 @@ const AppContent: React.FC = () => {
           </AnimatePresence>
         </main>
   
-        <SubscriptionModal isOpen={showSubModal} onClose={() => setShowSubModal(false)} />
+        <SubscriptionModal isOpen={showSubModal} onClose={() => setShowSubModal(false)} mode={subModalMode} />
   
         <footer className="py-8 text-center">
            <p className="text-xs text-slate-600 font-medium">تم التطوير بواسطة فليكس - Flex Studio Pro 2026</p>

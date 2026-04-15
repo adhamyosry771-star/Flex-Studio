@@ -226,7 +226,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="relative group w-full md:w-80">
-            <div className="flex items-center bg-slate-900/40 border border-slate-800 rounded-2xl px-4 focus-within:border-blue-500/50 transition-all">
+            <div className="flex items-center bg-slate-900/40 border border-slate-800 rounded-full px-5 focus-within:border-blue-500/50 transition-all">
               <Search className="text-slate-500 group-focus-within:text-blue-400 transition-colors shrink-0" size={18} />
               <input 
                 type="text" 
@@ -240,24 +240,24 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-4 mb-8 bg-slate-900/30 p-1.5 rounded-2xl border border-slate-800/50 w-fit">
+        <div className="flex items-center gap-4 mb-8 bg-slate-900/30 p-1.5 rounded-full border border-slate-800/50 w-fit">
           <button 
             onClick={() => setActiveTab('users')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 border ${activeTab === 'users' ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`px-6 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-2 border ${activeTab === 'users' ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             <Users size={16} />
             إدارة المستخدمين
           </button>
           <button 
             onClick={() => setActiveTab('codes')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 border ${activeTab === 'codes' ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`px-6 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-2 border ${activeTab === 'codes' ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             <Ticket size={16} />
             أكواد التفعيل
           </button>
           <button 
             onClick={() => setActiveTab('design')}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 border ${activeTab === 'design' ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`px-6 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-2 border ${activeTab === 'design' ? 'bg-blue-600/10 border-blue-500/30 text-blue-400' : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'}`}
           >
             <Palette size={16} />
             التصميم
@@ -281,7 +281,7 @@ export const AdminDashboard: React.FC = () => {
                   key={i} 
                   className="bg-slate-900/30 border border-slate-800 p-6 rounded-3xl"
                 >
-                  <div className={`w-12 h-12 rounded-2xl bg-${stat.color}-500/10 flex items-center justify-center text-${stat.color}-400 mb-4`}>
+                  <div className={`w-12 h-12 rounded-full bg-${stat.color}-500/10 flex items-center justify-center text-${stat.color}-400 mb-4`}>
                     <stat.icon size={24} />
                   </div>
                   <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">{stat.label}</p>
@@ -291,8 +291,8 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Users Table */}
-            <div className="bg-slate-900/30 border border-slate-800 rounded-[2.5rem] shadow-2xl mb-20">
-              <div className="overflow-x-auto rounded-[2.5rem] pb-32">
+            <div className="bg-slate-900/30 border border-slate-800 rounded-[3rem] shadow-2xl mb-20">
+              <div className="overflow-x-auto rounded-[3rem] pb-32">
                 <table className="w-full text-right">
                   <thead>
                     <tr className="border-b border-slate-800 bg-slate-800/20">
@@ -308,7 +308,7 @@ export const AdminDashboard: React.FC = () => {
                       <tr key={u.uid} className="hover:bg-slate-800/20 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0">
+                            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 overflow-hidden flex-shrink-0">
                               {u.photoURL ? (
                                 <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
                               ) : (
@@ -318,7 +318,7 @@ export const AdminDashboard: React.FC = () => {
                               )}
                             </div>
                             <div className="min-0">
-                              <p className="text-sm font-bold text-white truncate">{u.displayName}</p>
+                              <p className="text-sm font-bold text-white truncate">{u.displayName || 'مستخدم'}</p>
                               <p className="text-[10px] text-slate-500 truncate">{u.email}</p>
                             </div>
                           </div>
@@ -352,7 +352,7 @@ export const AdminDashboard: React.FC = () => {
                                 setEditingPhotoUid(editingPhotoUid === u.uid ? null : u.uid);
                                 setNewPhotoURL(u.photoURL || '');
                               }}
-                              className={`p-2 rounded-xl transition-all border ${editingPhotoUid === u.uid ? 'bg-blue-500/20 border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'bg-blue-500/10 border-transparent text-blue-400 hover:bg-blue-500/20'}`}
+                              className={`p-2 rounded-full transition-all border ${editingPhotoUid === u.uid ? 'bg-blue-500/20 border-blue-500/40 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'bg-blue-500/10 border-transparent text-blue-400 hover:bg-blue-500/20'}`}
                               title="تغيير صورة المستخدم"
                             >
                               <ImageIcon size={18} />
@@ -360,10 +360,10 @@ export const AdminDashboard: React.FC = () => {
 
                             {u.status === 'active' ? (
                               <div className="relative group/menu">
-                                <button className="p-2 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 transition-all">
+                                <button className="p-2 bg-red-500/10 text-red-400 rounded-full hover:bg-red-500/20 transition-all">
                                   <ShieldAlert size={18} />
                                 </button>
-                                <div className="absolute left-0 top-full mt-2 hidden group-hover/menu:flex flex-col bg-slate-900/90 border border-slate-800 rounded-xl p-2 shadow-2xl z-[100] w-32">
+                                <div className="absolute left-0 top-full mt-2 hidden group-hover/menu:flex flex-col bg-slate-900/90 border border-slate-800 rounded-2xl p-2 shadow-2xl z-[100] w-32">
                                   <button onClick={() => handleBan(u.uid, 'day')} className="text-[10px] p-2 hover:bg-slate-800 rounded-xl text-right text-slate-300">يوم واحد</button>
                                   <button onClick={() => handleBan(u.uid, 'week')} className="text-[10px] p-2 hover:bg-slate-800 rounded-xl text-right text-slate-300">أسبوع</button>
                                   <button onClick={() => handleBan(u.uid, 'year')} className="text-[10px] p-2 hover:bg-slate-800 rounded-xl text-right text-slate-300">سنة</button>
@@ -373,7 +373,7 @@ export const AdminDashboard: React.FC = () => {
                             ) : (
                               <button 
                                 onClick={() => handleUnban(u.uid)}
-                                className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500/20 transition-all"
+                                className="p-2 bg-emerald-500/10 text-emerald-400 rounded-full hover:bg-emerald-500/20 transition-all"
                                 title="إلغاء الحظر"
                               >
                                 <UserCheck size={18} />
@@ -381,7 +381,7 @@ export const AdminDashboard: React.FC = () => {
                             )}
                             <button 
                               onClick={() => handleDelete(u.uid)}
-                              className="p-2 bg-slate-800/50 text-slate-400 rounded-xl hover:bg-red-500/20 hover:text-red-400 transition-all"
+                              className="p-2 bg-slate-800/50 text-slate-400 rounded-full hover:bg-red-500/20 hover:text-red-400 transition-all"
                               title="حذف المستخدم"
                             >
                               <Trash2 size={18} />
@@ -409,12 +409,12 @@ export const AdminDashboard: React.FC = () => {
                                       value={newPhotoURL}
                                       onChange={(e) => setNewPhotoURL(e.target.value)}
                                       placeholder="https://example.com/photo.jpg"
-                                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500/50"
+                                      className="flex-1 bg-slate-900 border border-slate-800 rounded-full px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500/50"
                                     />
                                     <button 
                                       onClick={() => handleUpdateUserPhoto(u.uid)}
                                       disabled={isUpdatingPhoto}
-                                      className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-bold hover:bg-blue-500 transition-all disabled:opacity-50"
+                                      className="px-4 py-2 bg-blue-600 text-white rounded-full text-[10px] font-bold hover:bg-blue-500 transition-all disabled:opacity-50"
                                     >
                                       {isUpdatingPhoto ? <Clock className="animate-spin" size={14} /> : 'حفظ'}
                                     </button>
@@ -442,9 +442,9 @@ export const AdminDashboard: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Code Generator */}
             <div className="lg:col-span-1">
-              <div className="bg-slate-900/30 border border-slate-800 p-8 rounded-[2.5rem] sticky top-24">
+              <div className="bg-slate-900/30 border border-slate-800 p-8 rounded-[3rem] sticky top-24">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 bg-blue-600/20 rounded-xl border border-blue-500/30">
+                  <div className="p-2 bg-blue-600/20 rounded-full border border-blue-500/30">
                     <Plus className="text-blue-400" size={20} />
                   </div>
                   <h2 className="text-xl font-black text-white">توليد كود جديد</h2>
@@ -463,7 +463,7 @@ export const AdminDashboard: React.FC = () => {
                         <button
                           key={d.id}
                           onClick={() => setCodeDuration(d.id as any)}
-                          className={`py-3 rounded-xl text-xs font-bold transition-all border ${codeDuration === d.id ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}
+                          className={`py-3 rounded-full text-xs font-bold transition-all border ${codeDuration === d.id ? 'bg-blue-600/20 border-blue-500/50 text-blue-400 backdrop-blur-md' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}
                         >
                           {d.label}
                         </button>
@@ -474,7 +474,7 @@ export const AdminDashboard: React.FC = () => {
                   <button
                     onClick={generateCode}
                     disabled={isGenerating}
-                    className="w-full py-4 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50"
+                    className="w-full py-4 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-full font-black text-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50"
                   >
                     {isGenerating ? <Clock className="animate-spin" size={18} /> : <Ticket size={18} />}
                     توليد كود التفعيل
@@ -485,10 +485,10 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Codes List */}
             <div className="lg:col-span-2">
-              <div className="bg-slate-900/30 border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl">
+              <div className="bg-slate-900/30 border border-slate-800 rounded-[3rem] overflow-hidden shadow-2xl">
                 <div className="p-6 border-b border-slate-800 bg-slate-800/20 flex items-center justify-between">
                   <h2 className="text-lg font-black text-white">الأكواد المولدة</h2>
-                  <span className="text-[10px] font-bold text-slate-500 bg-slate-800 px-3 py-1 rounded-full">{codes.length} كود</span>
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-800 px-4 py-1.5 rounded-full border border-slate-700">{codes.length} كود</span>
                 </div>
                 
                 <div className="overflow-x-auto">
@@ -564,17 +564,17 @@ export const AdminDashboard: React.FC = () => {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-slate-900/30 border border-slate-800 p-8 rounded-[2.5rem] shadow-2xl"
+              className="bg-slate-900/30 border border-slate-800 p-8 rounded-[3rem] shadow-2xl"
             >
-              <div className="flex items-center gap-3 mb-8">
-                <div className="p-2 bg-blue-600/20 rounded-xl border border-blue-500/30">
-                  <Palette className="text-blue-400" size={24} />
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="p-2 bg-blue-600/20 rounded-full border border-blue-500/30">
+                    <Palette className="text-blue-400" size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-white">إعدادات التصميم</h2>
+                    <p className="text-slate-500 text-xs mt-1">تخصيص مظهر المنصة لجميع المستخدمين</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-xl font-black text-white">إعدادات التصميم</h2>
-                  <p className="text-slate-500 text-xs mt-1">تخصيص مظهر المنصة لجميع المستخدمين</p>
-                </div>
-              </div>
 
               <div className="space-y-8">
                 {/* Logo URL Input */}
@@ -585,7 +585,7 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                   
                   <div className="group">
-                    <div className="flex items-center bg-slate-950/50 border border-slate-800 rounded-2xl px-4 focus-within:border-blue-500/50 transition-all">
+                    <div className="flex items-center bg-slate-950/50 border border-slate-800 rounded-full px-4 focus-within:border-blue-500/50 transition-all">
                       <ImageIcon className="text-slate-500 group-focus-within:text-blue-400 transition-colors shrink-0" size={18} />
                       <input 
                         type="url" 
@@ -607,7 +607,7 @@ export const AdminDashboard: React.FC = () => {
                   <div className="space-y-4">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">خلفية صفحة الدخول</label>
                     <div className="group">
-                      <div className="flex items-center bg-slate-950/50 border border-slate-800 rounded-2xl px-4 focus-within:border-blue-500/50 transition-all">
+                      <div className="flex items-center bg-slate-950/50 border border-slate-800 rounded-full px-4 focus-within:border-blue-500/50 transition-all">
                         <ImageIcon className="text-slate-500 group-focus-within:text-blue-400 transition-colors shrink-0" size={18} />
                         <input 
                           type="url" 
@@ -623,7 +623,7 @@ export const AdminDashboard: React.FC = () => {
                   <div className="space-y-4">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">خلفية الموقع الرئيسية</label>
                     <div className="group">
-                      <div className="flex items-center bg-slate-950/50 border border-slate-800 rounded-2xl px-4 focus-within:border-blue-500/50 transition-all">
+                      <div className="flex items-center bg-slate-950/50 border border-slate-800 rounded-full px-4 focus-within:border-blue-500/50 transition-all">
                         <ImageIcon className="text-slate-500 group-focus-within:text-blue-400 transition-colors shrink-0" size={18} />
                         <input 
                           type="url" 
@@ -645,7 +645,7 @@ export const AdminDashboard: React.FC = () => {
                 <div className="p-6 bg-slate-950/50 rounded-3xl border border-slate-800/50">
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">معاينة الشعار الجديد</p>
                   <div className="flex items-center gap-4 p-4 bg-slate-900/50 rounded-2xl border border-slate-800 w-fit">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/30 flex items-center justify-center overflow-hidden">
+                    <div className="w-10 h-10 rounded-full bg-blue-600/10 border border-blue-500/30 flex items-center justify-center overflow-hidden">
                       {logoURL ? (
                         <img src={logoURL} alt="Preview" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/40?text=Error')} />
                       ) : (
@@ -674,7 +674,7 @@ export const AdminDashboard: React.FC = () => {
                     }
                   }}
                   disabled={isSavingSettings}
-                  className="w-full py-4 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50"
+                  className="w-full py-4 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-full font-black text-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-50"
                 >
                   {isSavingSettings ? <Clock className="animate-spin" size={18} /> : <Save size={18} />}
                   حفظ تغييرات التصميم

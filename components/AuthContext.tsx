@@ -75,7 +75,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const initialData = {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
-          displayName: firebaseUser.displayName || 'مستخدم جديد',
+          displayName: firebaseUser.displayName || 'مستخدم',
           photoURL: firebaseUser.photoURL || '',
           role: firebaseUser.email === 'adhamyosry56@gmail.com' ? 'admin' : 'user',
           status: 'active',
@@ -86,10 +86,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserData(initialData);
       } else {
         const existingData = userSnap.data();
-        await updateDoc(userRef, {
+        const updateData: any = {
           lastLogin: serverTimestamp(),
-        });
-        setUserData({ ...existingData, lastLogin: new Date() });
+        };
+        
+        // If Firestore has default name but Firebase has a real one, update it
+        if ((existingData.displayName === 'مستخدم جديد' || existingData.displayName === 'مستخدم') && firebaseUser.displayName) {
+          updateData.displayName = firebaseUser.displayName;
+        }
+
+        await updateDoc(userRef, updateData);
+        setUserData({ ...existingData, ...updateData, lastLogin: new Date() });
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `users/${firebaseUser.uid}`);
@@ -156,8 +163,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signupWithEmail = async (email: string, pass: string, name: string) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-      await updateProfile(userCredential.user, { displayName: name });
-      // syncUserToFirestore will be called by onAuthStateChanged
+      const firebaseUser = userCredential.user;
+      
+      // 1. Update Firebase Auth Profile
+      await updateProfile(firebaseUser, { displayName: name });
+      
+      // 2. Explicitly create Firestore document with the provided name
+      // This prevents the 'onAuthStateChanged' -> 'syncUserToFirestore' race condition
+      // from using the default 'مستخدم جديد' name.
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      const initialData = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: name,
+        photoURL: firebaseUser.photoURL || '',
+        role: firebaseUser.email === 'adhamyosry56@gmail.com' ? 'admin' : 'user',
+        status: 'active',
+        createdAt: serverTimestamp(),
+        lastLogin: serverTimestamp(),
+      };
+      
+      await setDoc(userRef, initialData);
+      setUserData(initialData);
+      
     } catch (error: any) {
       console.error("Signup failed:", error);
       throw error;

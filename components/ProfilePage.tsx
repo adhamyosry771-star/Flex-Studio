@@ -6,9 +6,10 @@ import { motion } from 'motion/react';
 
 interface ProfilePageProps {
   onBack: () => void;
+  onActivateClick: () => void;
 }
 
-export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
+export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onActivateClick }) => {
   const { userData, logout } = useAuth();
 
   const formatDate = (date: any) => {
@@ -53,7 +54,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
 
                 <div className="flex-1 text-center md:text-right md:mb-4">
                   <h1 className="text-3xl font-black text-white tracking-tight mb-1">
-                    {userData?.displayName || 'مستخدم فليكس'}
+                    {userData?.displayName || 'مستخدم'}
                   </h1>
                   <div className="flex items-center gap-2 text-blue-400 font-bold text-xs uppercase tracking-widest">
                     <Shield size={14} />
@@ -64,8 +65,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
 
               {/* Details Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-                <div className="bg-slate-800/30 border border-slate-800/50 rounded-2xl p-5 flex items-center gap-4 group transition-all">
-                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400">
+                <div className="bg-slate-800/30 border border-slate-800/50 rounded-3xl p-5 flex items-center gap-4 group transition-all">
+                  <div className="p-3 bg-blue-500/10 rounded-full text-blue-400">
                     <Mail size={20} />
                   </div>
                   <div>
@@ -74,8 +75,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
                   </div>
                 </div>
 
-                <div className="bg-slate-800/30 border border-slate-800/50 rounded-2xl p-5 flex items-center gap-4 group transition-all">
-                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400">
+                <div className="bg-slate-800/30 border border-slate-800/50 rounded-3xl p-5 flex items-center gap-4 group transition-all">
+                  <div className="p-3 bg-blue-500/10 rounded-full text-blue-400">
                     <Calendar size={20} />
                   </div>
                   <div>
@@ -84,11 +85,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
                   </div>
                 </div>
 
-                <div className="bg-slate-800/30 border border-slate-800/50 rounded-2xl p-5 flex items-center gap-4 group transition-all">
-                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400">
+                <button 
+                  onClick={onActivateClick}
+                  className="bg-slate-800/30 border border-slate-800/50 rounded-3xl p-5 flex items-center gap-4 group transition-all hover:bg-blue-500/5 hover:border-blue-500/30 text-right"
+                >
+                  <div className="p-3 bg-blue-500/10 rounded-full text-blue-400 group-hover:scale-110 transition-transform">
                     <Zap size={20} />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">حالة الاشتراك</p>
                     {userData?.role === 'admin' ? (
                       <p className="text-sm text-amber-400 font-bold">اشتراك مسؤول (دائم)</p>
@@ -96,15 +100,19 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
                       <div className="flex flex-col">
                         <p className="text-sm text-emerald-400 font-bold">مشترك نشط</p>
                         <p className="text-[9px] text-slate-500 mt-0.5">ينتهي في: {formatDate(userData.subscriptionExpires)}</p>
+                        <p className="text-[8px] text-blue-400 mt-1 font-bold">اضغط لتمديد الاشتراك</p>
                       </div>
                     ) : (
-                      <p className="text-sm text-red-400 font-bold">غير مشترك</p>
+                      <div className="flex flex-col">
+                        <p className="text-sm text-red-400 font-bold">غير مشترك</p>
+                        <p className="text-[8px] text-blue-400 mt-1 font-bold">اضغط لتفعيل الاشتراك</p>
+                      </div>
                     )}
                   </div>
-                </div>
+                </button>
 
-                <div className="bg-slate-800/30 border border-slate-800/50 rounded-2xl p-5 flex items-center gap-4 group transition-all">
-                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400">
+                <div className="bg-slate-800/30 border border-slate-800/50 rounded-3xl p-5 flex items-center gap-4 group transition-all">
+                  <div className="p-3 bg-blue-500/10 rounded-full text-blue-400">
                     <Shield size={20} />
                   </div>
                   <div>
@@ -118,7 +126,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
               <div className="flex flex-col sm:flex-row gap-4">
                 <button 
                   onClick={logout}
-                  className="flex-1 flex items-center justify-center gap-3 py-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-2xl font-black transition-all active:scale-[0.98]"
+                  className="flex-1 flex items-center justify-center gap-3 py-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-full font-black transition-all active:scale-[0.98]"
                 >
                   <LogOut size={20} />
                   تسجيل الخروج من الحساب

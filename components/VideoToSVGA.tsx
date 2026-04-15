@@ -14,6 +14,14 @@ export const VideoToSVGA: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
 
+  // New Settings
+  const [quality, setQuality] = useState<number>(80);
+  const [fps, setFps] = useState<number>(15);
+  const [compressionRatio, setCompressionRatio] = useState<number>(80);
+  const [imageQuality, setImageQuality] = useState<number>(80);
+  const [exportWidth, setExportWidth] = useState<string>('');
+  const [exportHeight, setExportHeight] = useState<string>('');
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
@@ -124,18 +132,21 @@ export const VideoToSVGA: React.FC = () => {
 
     try {
       const video = videoRef.current;
-      const fps = 15; // Fixed FPS for SVGA to keep size reasonable
+      const targetFps = fps;
       const duration = video.duration;
       
-      if (duration > 15) {
-         alert("الفيديو طويل جداً. يرجى استخدام فيديو لا يتجاوز 15 ثانية لتجنب حجم الملف الكبير جداً.");
+      if (duration > 30) {
+         alert("الفيديو طويل جداً. يرجى استخدام فيديو لا يتجاوز 30 ثانية لتجنب حجم الملف الكبير جداً.");
          setIsConverting(false);
          return;
       }
       
-      const totalFrames = Math.floor(duration * fps);
-      const w = video.videoWidth;
-      const h = video.videoHeight;
+      const totalFrames = Math.floor(duration * targetFps);
+      
+      // Smart Scaling: Use quality slider to scale dimensions if export dimensions aren't set
+      const scaleFactor = quality / 100;
+      const w = exportWidth ? parseInt(exportWidth) : Math.round(video.videoWidth * scaleFactor);
+      const h = exportHeight ? parseInt(exportHeight) : Math.round(video.videoHeight * scaleFactor);
 
       const canvas = document.createElement('canvas');
       canvas.width = w;
@@ -147,7 +158,7 @@ export const VideoToSVGA: React.FC = () => {
       video.pause();
 
       for (let i = 0; i < totalFrames; i++) {
-        const time = i / fps;
+        const time = i / targetFps;
         video.currentTime = time;
         await new Promise(r => {
           const onSeeked = () => {
@@ -159,14 +170,15 @@ export const VideoToSVGA: React.FC = () => {
 
         drawFrame(video, canvas, featherX, featherY);
         
-        const pngBuffer = await new Promise<Uint8Array>(resolve => {
+        const frameBuffer = await new Promise<Uint8Array>(resolve => {
+          // Back to PNG for maximum compatibility with all SVGA players
           canvas.toBlob(blob => {
             const reader = new FileReader();
             reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
             reader.readAsArrayBuffer(blob!);
           }, 'image/png');
         });
-        framePngs.push(pngBuffer);
+        framePngs.push(frameBuffer);
         setProgress(Math.round((i / totalFrames) * 50));
       }
 
@@ -216,7 +228,7 @@ export const VideoToSVGA: React.FC = () => {
 
       const movie = {
         version: "2.0",
-        params: { viewBoxWidth: w, viewBoxHeight: h, fps: fps, frames: totalFrames },
+        params: { viewBoxWidth: w, viewBoxHeight: h, fps: targetFps, frames: totalFrames },
         images: images,
         sprites: sprites,
         audios: audios
@@ -225,7 +237,10 @@ export const VideoToSVGA: React.FC = () => {
       setStatusText('جاري ضغط الملف...');
       const message = MovieEntity.create(movie);
       const buffer = MovieEntity.encode(message).finish();
-      const deflated = pako.deflate(buffer);
+      
+      // Use compressionRatio for pako deflate level (0-9)
+      const pakoLevel = Math.min(9, Math.max(0, Math.floor(compressionRatio / 10)));
+      const deflated = pako.deflate(buffer, { level: pakoLevel as any });
       
       setProgress(100);
       setStatusText('تم الانتهاء!');
@@ -303,6 +318,76 @@ export const VideoToSVGA: React.FC = () => {
                   onChange={(e) => setFeatherY(Number(e.target.value))}
                   className="w-full accent-indigo-500"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">الجودة</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="range" min="1" max="100" value={quality} 
+                      onChange={(e) => setQuality(Number(e.target.value))}
+                      className="flex-1 accent-indigo-500"
+                    />
+                    <span className="text-xs text-indigo-400 font-bold w-8">{quality}%</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">الفريمات (FPS)</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="range" min="1" max="60" value={fps} 
+                      onChange={(e) => setFps(Number(e.target.value))}
+                      className="flex-1 accent-indigo-500"
+                    />
+                    <span className="text-xs text-indigo-400 font-bold w-8">{fps}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">نسبة الضغط</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="range" min="1" max="100" value={compressionRatio} 
+                      onChange={(e) => setCompressionRatio(Number(e.target.value))}
+                      className="flex-1 accent-indigo-500"
+                    />
+                    <span className="text-xs text-indigo-400 font-bold w-8">{compressionRatio}%</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">ضغط الصور</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="range" min="1" max="100" value={imageQuality} 
+                      onChange={(e) => setImageQuality(Number(e.target.value))}
+                      className="flex-1 accent-indigo-500"
+                    />
+                    <span className="text-xs text-indigo-400 font-bold w-8">{imageQuality}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 mt-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">أبعاد التصدير (اختياري)</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <input 
+                    type="number" 
+                    placeholder="العرض" 
+                    value={exportWidth}
+                    onChange={(e) => setExportWidth(e.target.value)}
+                    className="bg-slate-800/50 border border-slate-700 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500/50"
+                  />
+                  <input 
+                    type="number" 
+                    placeholder="الارتفاع" 
+                    value={exportHeight}
+                    onChange={(e) => setExportHeight(e.target.value)}
+                    className="bg-slate-800/50 border border-slate-700 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
               </div>
               <p className="text-xs text-slate-500 mt-1">يقوم بتنعيم حواف الفيديو وجعلها شفافة تدريجياً لدمجها مع أي خلفية.</p>
               

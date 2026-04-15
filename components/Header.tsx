@@ -20,7 +20,7 @@ export const Header: React.FC<HeaderProps> = ({ currentView = 'viewer', setCurre
           className="flex items-center gap-3 group cursor-pointer shrink-0"
         >
           <div className="relative hidden sm:block">
-            <div className="relative bg-blue-600/10 border border-blue-500/30 rounded-xl transition-all duration-300 group-hover:border-blue-400/50 flex items-center justify-center w-10 h-10 overflow-hidden">
+            <div className="relative bg-blue-600/10 border border-blue-500/30 rounded-full transition-all duration-300 group-hover:border-blue-400/50 flex items-center justify-center w-10 h-10 overflow-hidden">
               {appSettings?.logoURL && (
                 <img src={appSettings.logoURL} alt="Logo" className="w-full h-full object-cover" />
               )}
@@ -42,26 +42,26 @@ export const Header: React.FC<HeaderProps> = ({ currentView = 'viewer', setCurre
             <>
               <button
                 onClick={() => setCurrentView('viewer')}
-                className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${currentView === 'viewer' ? 'bg-blue-500/20 border border-blue-500/30 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
+                className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all ${currentView === 'viewer' ? 'bg-blue-500/20 border border-blue-500/30 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
               >
                 عارض SVGA
               </button>
               <button
                 onClick={() => setCurrentView('converter')}
-                className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${currentView === 'converter' ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
+                className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all ${currentView === 'converter' ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
               >
                 تحويل فيديو
               </button>
               <button
                 onClick={() => setCurrentView('matcher')}
-                className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${currentView === 'matcher' ? 'bg-pink-500/20 border border-pink-500/30 text-pink-300 shadow-[0_0_15px_rgba(236,72,153,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
+                className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all ${currentView === 'matcher' ? 'bg-pink-500/20 border border-pink-500/30 text-pink-300 shadow-[0_0_15px_rgba(236,72,153,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
               >
                 تطابق الصور
               </button>
               {isAdmin && (
                 <button
                   onClick={() => setCurrentView('admin')}
-                  className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-amber-500/20 border border-amber-500/30 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
+                  className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all ${currentView === 'admin' ? 'bg-amber-500/20 border border-amber-500/30 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
                 >
                   لوحة التحكم
                 </button>
