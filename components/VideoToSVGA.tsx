@@ -4,6 +4,8 @@ import pako from 'pako';
 import { parse } from 'protobufjs';
 import { svgaSchema } from '../svga-proto';
 
+import lamejs from 'lamejs';
+
 export const VideoToSVGA: React.FC = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>('');
@@ -20,6 +22,7 @@ export const VideoToSVGA: React.FC = () => {
   const [isConverting, setIsConverting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
+  const [isExtractingAudio, setIsExtractingAudio] = useState(false);
 
   // New Settings
   const [quality, setQuality] = useState<number>(80);
@@ -62,104 +65,67 @@ export const VideoToSVGA: React.FC = () => {
     }
   };
 
-  const drawFrame = (video: HTMLVideoElement, canvas: HTMLCanvasElement, fX: number, fTop: number, fBottom: number, bgImg?: HTMLImageElement) => {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const w = canvas.width;
-    const h = canvas.height;
+  // Refs for performance optimization
+  const offscreenVCRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenMaskRef = useRef<HTMLCanvasElement | null>(null);
+  const maskCacheSettings = useRef<string>('');
 
-    ctx.clearRect(0, 0, w, h);
+  const updateMaskCache = (w: number, h: number, fX: number, fTop: number, fBottom: number) => {
+    const settingsKey = `${w}-${h}-${fX}-${fTop}-${fBottom}-${isCircleMask}-${isSquareMask}-${circleFeather}-${squareFeather}`;
+    if (maskCacheSettings.current === settingsKey && offscreenMaskRef.current) return;
 
-    if (bgImg) {
-      ctx.drawImage(bgImg, 0, 0, w, h);
-    }
+    if (!offscreenMaskRef.current) offscreenMaskRef.current = document.createElement('canvas');
+    const maskCanvas = offscreenMaskRef.current;
+    maskCanvas.width = w;
+    maskCanvas.height = h;
+    const mctx = maskCanvas.getContext('2d');
+    if (!mctx) return;
 
-    const vCanvas = document.createElement('canvas');
-    vCanvas.width = w;
-    vCanvas.height = h;
-    const vCtx = vCanvas.getContext('2d');
-    if (!vCtx) return;
-
-    vCtx.drawImage(video, 0, 0, w, h);
-
+    mctx.clearRect(0, 0, w, h);
+    mctx.globalCompositeOperation = 'source-over';
+    
     if (isCircleMask) {
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = w;
-      maskCanvas.height = h;
-      const mctx = maskCanvas.getContext('2d');
-      if (!mctx) return;
-
       const centerX = w / 2;
       const centerY = h / 2;
       const radius = Math.min(w, h) / 2;
-
       const grad = mctx.createRadialGradient(centerX, centerY, radius * (1 - circleFeather/100), centerX, centerY, radius);
       grad.addColorStop(0, 'rgba(0,0,0,1)');
       grad.addColorStop(1, 'rgba(0,0,0,0)');
-
       mctx.fillStyle = grad;
       mctx.beginPath();
       mctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       mctx.fill();
-
-      vCtx.globalCompositeOperation = 'destination-in';
-      vCtx.drawImage(maskCanvas, 0, 0);
-      vCtx.globalCompositeOperation = 'source-over';
     } else if (isSquareMask) {
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = w;
-      maskCanvas.height = h;
-      const mctx = maskCanvas.getContext('2d');
-      if (!mctx) return;
-
       mctx.fillStyle = 'black';
       mctx.fillRect(0, 0, w, h);
       mctx.globalCompositeOperation = 'destination-out';
-
       const f = (Math.min(w, h) / 2) * (squareFeather / 100);
-
-      // Top
-      let grad = mctx.createLinearGradient(0, 0, 0, f);
-      grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      mctx.fillStyle = grad;
-      mctx.fillRect(0, 0, w, f);
-
-      // Bottom
-      grad = mctx.createLinearGradient(0, h, 0, h - f);
-      grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      mctx.fillStyle = grad;
-      mctx.fillRect(0, h - f, w, h);
-
-      // Left
-      grad = mctx.createLinearGradient(0, 0, f, 0);
-      grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      mctx.fillStyle = grad;
-      mctx.fillRect(0, 0, f, h);
-
-      // Right
-      grad = mctx.createLinearGradient(w, 0, w - f, 0);
-      grad.addColorStop(0, 'rgba(0,0,0,1)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      mctx.fillStyle = grad;
-      mctx.fillRect(w - f, 0, w, h);
-
-      vCtx.globalCompositeOperation = 'destination-in';
-      vCtx.drawImage(maskCanvas, 0, 0);
-      vCtx.globalCompositeOperation = 'source-over';
+      if (f > 0) {
+        let grad = mctx.createLinearGradient(0, 0, 0, f);
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        mctx.fillStyle = grad;
+        mctx.fillRect(0, 0, w, f);
+        grad = mctx.createLinearGradient(0, h, 0, h - f);
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        mctx.fillStyle = grad;
+        mctx.fillRect(0, h - f, w, h);
+        grad = mctx.createLinearGradient(0, 0, f, 0);
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        mctx.fillStyle = grad;
+        mctx.fillRect(0, 0, f, h);
+        grad = mctx.createLinearGradient(w, 0, w - f, 0);
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        mctx.fillStyle = grad;
+        mctx.fillRect(w - f, 0, w, h);
+      }
     } else if (fX > 0 || fTop > 0 || fBottom > 0) {
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = w;
-      maskCanvas.height = h;
-      const mctx = maskCanvas.getContext('2d');
-      if (!mctx) return;
-
       mctx.fillStyle = 'black';
       mctx.fillRect(0, 0, w, h);
       mctx.globalCompositeOperation = 'destination-out';
-
       if (fX > 0) {
         const fx = w * (fX / 100);
         let grad = mctx.createLinearGradient(0, 0, fx, 0);
@@ -167,14 +133,12 @@ export const VideoToSVGA: React.FC = () => {
         grad.addColorStop(1, 'rgba(0,0,0,0)');
         mctx.fillStyle = grad;
         mctx.fillRect(0, 0, fx, h);
-
         grad = mctx.createLinearGradient(w, 0, w - fx, 0);
         grad.addColorStop(0, 'rgba(0,0,0,1)');
         grad.addColorStop(1, 'rgba(0,0,0,0)');
         mctx.fillStyle = grad;
         mctx.fillRect(w - fx, 0, fx, h);
       }
-
       if (fTop > 0) {
         const fyTop = h * (fTop / 100);
         let grad = mctx.createLinearGradient(0, 0, 0, fyTop);
@@ -183,7 +147,6 @@ export const VideoToSVGA: React.FC = () => {
         mctx.fillStyle = grad;
         mctx.fillRect(0, 0, w, fyTop);
       }
-
       if (fBottom > 0) {
         const fyBottom = h * (fBottom / 100);
         let grad = mctx.createLinearGradient(0, h, 0, h - fyBottom);
@@ -192,10 +155,44 @@ export const VideoToSVGA: React.FC = () => {
         mctx.fillStyle = grad;
         mctx.fillRect(0, h - fyBottom, w, fyBottom);
       }
+    } else {
+      mctx.fillStyle = 'black';
+      mctx.fillRect(0, 0, w, h);
+    }
+    
+    maskCacheSettings.current = settingsKey;
+  };
 
+  const drawFrame = (video: HTMLVideoElement, canvas: HTMLCanvasElement, fX: number, fTop: number, fBottom: number, bgImg?: HTMLImageElement) => {
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    if (!offscreenVCRef.current) offscreenVCRef.current = document.createElement('canvas');
+    const vCanvas = offscreenVCRef.current;
+    if (vCanvas.width !== w || vCanvas.height !== h) {
+      vCanvas.width = w;
+      vCanvas.height = h;
+    }
+
+    const vCtx = vCanvas.getContext('2d');
+    if (!vCtx) return;
+
+    // Use Cache
+    updateMaskCache(w, h, fX, fTop, fBottom);
+    const maskCanvas = offscreenMaskRef.current;
+
+    ctx.clearRect(0, 0, w, h);
+    if (bgImg) ctx.drawImage(bgImg, 0, 0, w, h);
+
+    vCtx.globalCompositeOperation = 'source-over';
+    vCtx.clearRect(0, 0, w, h);
+    vCtx.drawImage(video, 0, 0, w, h);
+
+    if (maskCanvas) {
       vCtx.globalCompositeOperation = 'destination-in';
       vCtx.drawImage(maskCanvas, 0, 0);
-      vCtx.globalCompositeOperation = 'source-over';
     }
 
     ctx.drawImage(vCanvas, 0, 0);
@@ -229,11 +226,108 @@ export const VideoToSVGA: React.FC = () => {
   useEffect(() => {
     if (videoUrl) {
       animationRef.current = requestAnimationFrame(updatePreview);
+      if (videoRef.current) {
+        videoRef.current.play().catch(err => console.log("Playback failed:", err));
+      }
     }
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [videoUrl, featherX, featherTop, featherBottom, isCircleMask, circleFeather, isSquareMask, squareFeather, bgImageUrl]);
+
+  const extractAudioFromVideo = async () => {
+    if (!videoFile) return;
+    setIsExtractingAudio(true);
+    setStatusText('بدء استخراج الصوت...');
+    setProgress(0);
+    
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
+      setStatusText('قراءة ملف الفيديو...');
+      const arrayBuffer = await videoFile.arrayBuffer();
+      
+      setStatusText('فك تشفير الصوت (قد يستغرق وقتاً)...');
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      const numberOfChannels = audioBuffer.numberOfChannels;
+      const sampleRate = audioBuffer.sampleRate;
+      
+      setStatusText('تجهيز محرك MP3...');
+      // Handle potential variations in lamejs import
+      const Encoder = (lamejs as any).Mp3Encoder || (lamejs as any).default?.Mp3Encoder;
+      
+      if (!Encoder) {
+        throw new Error('تعذر تحميل محرك MP3 (lamejs). يرجى المحاولة مرة أخرى.');
+      }
+
+      const mp3encoder = new Encoder(numberOfChannels, sampleRate, 128);
+      const mp3Data: Uint8Array[] = [];
+      const sampleBlockSize = 1152;
+      
+      const left = audioBuffer.getChannelData(0);
+      const right = numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
+      
+      setStatusText('جاري التحويل إلى MP3...');
+      for (let i = 0; i < left.length; i += sampleBlockSize) {
+        const leftChunk = left.subarray(i, i + sampleBlockSize);
+        const leftInt = new Int16Array(leftChunk.length);
+        for (let j = 0; j < leftChunk.length; j++) {
+          const s = Math.max(-1, Math.min(1, leftChunk[j]));
+          leftInt[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        
+        let mp3buf;
+        if (right) {
+          const rightChunk = right.subarray(i, i + sampleBlockSize);
+          const rightInt = new Int16Array(rightChunk.length);
+          for (let j = 0; j < rightChunk.length; j++) {
+            const s = Math.max(-1, Math.min(1, rightChunk[j]));
+            rightInt[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+          mp3buf = mp3encoder.encodeBuffer(leftInt, rightInt);
+        } else {
+          mp3buf = mp3encoder.encodeBuffer(leftInt);
+        }
+        
+        if (mp3buf.length > 0) {
+          mp3Data.push(new Uint8Array(mp3buf));
+        }
+
+        if (i % (sampleRate * 2) < sampleBlockSize) {
+           setProgress(Math.round((i / left.length) * 100));
+        }
+      }
+      
+      const mp3Last = mp3encoder.flush();
+      if (mp3Last.length > 0) {
+        mp3Data.push(new Uint8Array(mp3Last));
+      }
+      
+      setStatusText('جاري إنشاء ملف التحميل...');
+      const blob = new Blob(mp3Data, { type: 'audio/mp3' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${videoFile.name.split('.')[0]}_audio.mp3`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      setStatusText('تم بنجاح!');
+      alert("تم استخراج الصوت بصيغة MP3 بنجاح.");
+      audioContext.close();
+    } catch (err) {
+      console.error("Audio Extraction Error:", err);
+      alert(err instanceof Error ? err.message : "حدث خطأ أثناء استخراج الصوت MP3.");
+    } finally {
+      setIsExtractingAudio(false);
+      setProgress(0);
+      setStatusText('');
+    }
+  };
 
   const convertToSVGA = async () => {
     if (!videoRef.current || !videoFile || !canvasRef.current) return;
@@ -371,103 +465,6 @@ export const VideoToSVGA: React.FC = () => {
     } catch (err) {
       console.error("Conversion Error:", err);
       alert("حدث خطأ أثناء التحويل.");
-    } finally {
-      setIsConverting(false);
-    }
-  };
-
-  const convertToVideo = async () => {
-    if (!videoRef.current || !videoFile || !canvasRef.current) return;
-    setIsConverting(true);
-    setProgress(0);
-    setStatusText('جاري بدء التسجيل...');
-
-    try {
-      const video = videoRef.current;
-      const duration = video.duration;
-      
-      const scaleFactor = quality / 100;
-      const w = exportWidth ? parseInt(exportWidth) : Math.round(video.videoWidth * scaleFactor);
-      const h = exportHeight ? parseInt(exportHeight) : Math.round(video.videoHeight * scaleFactor);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-
-      let bgImg: HTMLImageElement | undefined;
-      if (bgImageUrl) {
-        bgImg = new Image();
-        bgImg.src = bgImageUrl;
-        await new Promise(r => bgImg!.onload = r);
-      }
-
-      const canvasStream = canvas.captureStream(fps);
-      const outputStream = new MediaStream();
-      canvasStream.getVideoTracks().forEach(track => outputStream.addTrack(track));
-
-      if (audioFile) {
-        const audioContext = new AudioContext();
-        const audioBuffer = await audioFile.arrayBuffer();
-        const decodedData = await audioContext.decodeAudioData(audioBuffer);
-        const source = audioContext.createBufferSource();
-        source.buffer = decodedData;
-        const dest = audioContext.createMediaStreamDestination();
-        source.connect(dest);
-        dest.stream.getAudioTracks().forEach(track => outputStream.addTrack(track));
-        source.start(0);
-      }
-
-      const getSupportedMimeType = () => {
-        const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
-        for (const type of types) {
-          if (MediaRecorder.isTypeSupported(type)) return type;
-        }
-        return '';
-      };
-
-      const mimeType = getSupportedMimeType();
-      const mediaRecorder = new MediaRecorder(outputStream, { mimeType });
-      const chunks: Blob[] = [];
-
-      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-      mediaRecorder.onstop = async () => {
-        const videoBlob = new Blob(chunks, { type: mimeType });
-        const url = URL.createObjectURL(videoBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
-        a.download = `${videoFile.name.split('.')[0]}_preview.${extension}`;
-        a.click();
-        URL.revokeObjectURL(url);
-      };
-
-      video.currentTime = 0;
-      video.playbackRate = 1.0;
-      video.pause();
-
-      mediaRecorder.start();
-
-      const totalFrames = Math.floor(duration * fps);
-      for (let i = 0; i < totalFrames; i++) {
-        video.currentTime = i / fps;
-        await new Promise(r => {
-          const onSeeked = () => {
-             video.removeEventListener('seeked', onSeeked);
-             r(null);
-          };
-          video.addEventListener('seeked', onSeeked);
-        });
-        drawFrame(video, canvas, featherX, featherTop, featherBottom, bgImg);
-        setProgress(Math.round((i / totalFrames) * 100));
-      }
-
-      mediaRecorder.stop();
-      setStatusText('تم تحميل الملف (MP4)!');
-      alert("تم تصدير الملف بصيغة MP4 بنجاح.");
-
-    } catch (err) {
-      console.error("Video Export Error:", err);
-      alert("حدث خطأ أثناء تصدير الفيديو.");
     } finally {
       setIsConverting(false);
     }
@@ -687,7 +684,25 @@ export const VideoToSVGA: React.FC = () => {
               <p className="text-xs text-slate-500 mt-1">يقوم بتنعيم حواف الفيديو وجعلها شفافة تدريجياً لدمجها مع أي خلفية.</p>
               
               <div className="flex flex-col gap-2 mt-4 border-t border-slate-800 pt-4">
-                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                <button 
+                  onClick={extractAudioFromVideo}
+                  disabled={isExtractingAudio || isConverting}
+                  className="w-full py-3 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-400 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isExtractingAudio ? (
+                    <>
+                      <Loader2 className="animate-spin" size={18} />
+                      جاري الاستخراج...
+                    </>
+                  ) : (
+                    <>
+                      <Music size={18} />
+                      استخراج الملف الصوتي من الفيديو
+                    </>
+                  )}
+                </button>
+
+                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2 mt-2">
                   <Music size={16} className="text-indigo-400" />
                   إضافة ملف صوتي (اختياري)
                 </label>
@@ -737,24 +752,6 @@ export const VideoToSVGA: React.FC = () => {
                 )}
               </button>
 
-              <button 
-                onClick={convertToVideo}
-                disabled={isConverting}
-                className="w-full py-4 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-300 rounded-xl font-bold text-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:active:scale-100 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
-              >
-                {isConverting ? (
-                   <>
-                    <Loader2 className="animate-spin" size={24} />
-                    جاري التصدير...
-                  </>
-                ) : (
-                  <>
-                    <FileVideo size={24} />
-                    تصدير كفيديو MP4
-                  </>
-                )}
-              </button>
-              
               <button 
                 onClick={() => { setVideoFile(null); setVideoUrl(''); }}
                 disabled={isConverting}
