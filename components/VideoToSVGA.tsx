@@ -4,8 +4,6 @@ import pako from 'pako';
 import { parse } from 'protobufjs';
 import { svgaSchema } from '../svga-proto';
 
-import lamejs from 'lamejs';
-
 export const VideoToSVGA: React.FC = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string>('');
@@ -22,7 +20,6 @@ export const VideoToSVGA: React.FC = () => {
   const [isConverting, setIsConverting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
-  const [isExtractingAudio, setIsExtractingAudio] = useState(false);
 
   // New Settings
   const [quality, setQuality] = useState<number>(80);
@@ -234,100 +231,6 @@ export const VideoToSVGA: React.FC = () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [videoUrl, featherX, featherTop, featherBottom, isCircleMask, circleFeather, isSquareMask, squareFeather, bgImageUrl]);
-
-  const extractAudioFromVideo = async () => {
-    if (!videoFile) return;
-    setIsExtractingAudio(true);
-    setStatusText('بدء استخراج الصوت...');
-    setProgress(0);
-    
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-
-      setStatusText('قراءة ملف الفيديو...');
-      const arrayBuffer = await videoFile.arrayBuffer();
-      
-      setStatusText('فك تشفير الصوت (قد يستغرق وقتاً)...');
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      
-      const numberOfChannels = audioBuffer.numberOfChannels;
-      const sampleRate = audioBuffer.sampleRate;
-      
-      setStatusText('تجهيز محرك MP3...');
-      // Handle potential variations in lamejs import
-      const Encoder = (lamejs as any).Mp3Encoder || (lamejs as any).default?.Mp3Encoder;
-      
-      if (!Encoder) {
-        throw new Error('تعذر تحميل محرك MP3 (lamejs). يرجى المحاولة مرة أخرى.');
-      }
-
-      const mp3encoder = new Encoder(numberOfChannels, sampleRate, 128);
-      const mp3Data: Uint8Array[] = [];
-      const sampleBlockSize = 1152;
-      
-      const left = audioBuffer.getChannelData(0);
-      const right = numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
-      
-      setStatusText('جاري التحويل إلى MP3...');
-      for (let i = 0; i < left.length; i += sampleBlockSize) {
-        const leftChunk = left.subarray(i, i + sampleBlockSize);
-        const leftInt = new Int16Array(leftChunk.length);
-        for (let j = 0; j < leftChunk.length; j++) {
-          const s = Math.max(-1, Math.min(1, leftChunk[j]));
-          leftInt[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-        }
-        
-        let mp3buf;
-        if (right) {
-          const rightChunk = right.subarray(i, i + sampleBlockSize);
-          const rightInt = new Int16Array(rightChunk.length);
-          for (let j = 0; j < rightChunk.length; j++) {
-            const s = Math.max(-1, Math.min(1, rightChunk[j]));
-            rightInt[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-          }
-          mp3buf = mp3encoder.encodeBuffer(leftInt, rightInt);
-        } else {
-          mp3buf = mp3encoder.encodeBuffer(leftInt);
-        }
-        
-        if (mp3buf.length > 0) {
-          mp3Data.push(new Uint8Array(mp3buf));
-        }
-
-        if (i % (sampleRate * 2) < sampleBlockSize) {
-           setProgress(Math.round((i / left.length) * 100));
-        }
-      }
-      
-      const mp3Last = mp3encoder.flush();
-      if (mp3Last.length > 0) {
-        mp3Data.push(new Uint8Array(mp3Last));
-      }
-      
-      setStatusText('جاري إنشاء ملف التحميل...');
-      const blob = new Blob(mp3Data, { type: 'audio/mp3' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${videoFile.name.split('.')[0]}_audio.mp3`;
-      a.click();
-      URL.revokeObjectURL(url);
-      
-      setStatusText('تم بنجاح!');
-      alert("تم استخراج الصوت بصيغة MP3 بنجاح.");
-      audioContext.close();
-    } catch (err) {
-      console.error("Audio Extraction Error:", err);
-      alert(err instanceof Error ? err.message : "حدث خطأ أثناء استخراج الصوت MP3.");
-    } finally {
-      setIsExtractingAudio(false);
-      setProgress(0);
-      setStatusText('');
-    }
-  };
 
   const convertToSVGA = async () => {
     if (!videoRef.current || !videoFile || !canvasRef.current) return;
@@ -684,24 +587,6 @@ export const VideoToSVGA: React.FC = () => {
               <p className="text-xs text-slate-500 mt-1">يقوم بتنعيم حواف الفيديو وجعلها شفافة تدريجياً لدمجها مع أي خلفية.</p>
               
               <div className="flex flex-col gap-2 mt-4 border-t border-slate-800 pt-4">
-                <button 
-                  onClick={extractAudioFromVideo}
-                  disabled={isExtractingAudio || isConverting}
-                  className="w-full py-3 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-400 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isExtractingAudio ? (
-                    <>
-                      <Loader2 className="animate-spin" size={18} />
-                      جاري الاستخراج...
-                    </>
-                  ) : (
-                    <>
-                      <Music size={18} />
-                      استخراج الملف الصوتي من الفيديو
-                    </>
-                  )}
-                </button>
-
                 <label className="text-sm font-semibold text-slate-300 flex items-center gap-2 mt-2">
                   <Music size={16} className="text-indigo-400" />
                   إضافة ملف صوتي (اختياري)
