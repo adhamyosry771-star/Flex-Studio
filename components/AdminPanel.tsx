@@ -1189,10 +1189,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                      إضافة دخولية جديدة للمتجر
                    </h4>
                    
-                   <div className="flex flex-col items-center justify-center py-4 bg-black/40 rounded-3xl border border-white/5 relative overflow-hidden h-[240px] shadow-inner">
+                   <div className="flex flex-col items-center justify-center py-4 bg-black/40 rounded-3xl border border-white/5 relative overflow-hidden h-[320px] shadow-inner">
                       {entryVideoUrl ? (
                         <div className="w-full h-full relative group">
-                          <video src={entryVideoUrl} autoPlay loop playsInline className="w-full h-full object-contain" />
+                          {entryVideoUrl.toLowerCase().includes('.svga') ? (
+                             <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-indigo-900/20 backdrop-blur-sm">
+                               <div className="w-20 h-20 rounded-full bg-indigo-500/20 flex items-center justify-center animate-bounce">
+                                 <i className="fas fa-magic text-3xl text-indigo-400"></i>
+                               </div>
+                               <div className="text-center space-y-1">
+                                 <p className="text-[11px] font-black text-white">تم اكتشاف ملف SVGA بنجاح</p>
+                                 <p className="text-[9px] text-white/50 leading-relaxed px-8">ستظهر المعاينة الكاملة والحركة بعد النشر.</p>
+                               </div>
+                             </div>
+                           ) : (
+                             <video src={entryVideoUrl} autoPlay loop playsInline className="w-full h-full object-contain" />
+                           )}
                         </div>
                       ) : entryPreviewImage ? (
                         <img src={entryPreviewImage} className="w-full h-full object-cover" alt="preview" />
@@ -1214,8 +1226,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose, isOffic
                         <input value={entryName} onChange={e => setEntryName(e.target.value)} placeholder="مثلاً: دخول الملك..." className="w-full bg-white/5 border border-white/10 py-4 px-6 rounded-2xl text-xs text-white outline-none focus:border-purple-500/40 transition-all shadow-inner" />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-purple-400/60 uppercase mr-2 tracking-widest">رابط فيديو الدخولية (MP4)</label>
-                        <input value={entryVideoUrl} onChange={e => setEntryVideoUrl(e.target.value)} placeholder="ضع رابط الفيديو هنا للمعاينة..." className="w-full bg-white/5 border border-white/10 py-4 px-6 rounded-2xl text-[10px] text-white outline-none focus:border-purple-500/40 transition-all shadow-inner font-mono" />
+                        <label className="text-[10px] font-black text-purple-400/60 uppercase mr-2 tracking-widest">رابط الدخولية (MP4 أو SVGA)</label>
+                        <input value={entryVideoUrl} onChange={e => setEntryVideoUrl(e.target.value)} placeholder="ضع رابط الفيديو أو ملف SVGA هنا للمعاينة..." className="w-full bg-white/5 border border-white/10 py-4 px-6 rounded-2xl text-[10px] text-white outline-none focus:border-purple-500/40 transition-all shadow-inner font-mono" />
                       </div>
                       <div className="grid grid-cols-2 gap-5">
                         <div className="space-y-2">

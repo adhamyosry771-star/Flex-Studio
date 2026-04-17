@@ -216,57 +216,26 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
     const origImg = new Image();
     origImg.onload = () => {
       const canvas = editCanvasRef.current!;
-      canvas.width = origImg.width;
-      canvas.height = origImg.height;
+      // Moderate 2x padding to allow scaling without massive performance hit
+      canvas.width = origImg.width * 2;
+      canvas.height = origImg.height * 2;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      let bbox = { x: 0, y: 0, w: origImg.width, h: origImg.height };
-      if (editSettings.smartMatch) {
-        ctx.drawImage(origImg, 0, 0);
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imgData.data;
-        let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-        let hasPixels = false;
-        for (let y = 0; y < canvas.height; y++) {
-          for (let x = 0; x < canvas.width; x++) {
-            if (data[(y * canvas.width + x) * 4 + 3] > 10) {
-              hasPixels = true;
-              if (x < minX) minX = x;
-              if (x > maxX) maxX = x;
-              if (y < minY) minY = y;
-              if (y > maxY) maxY = y;
-            }
-          }
-        }
-        if (hasPixels) {
-          bbox = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
-        }
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-
       const newImg = new Image();
       newImg.onload = () => {
-        let drawW = newImg.width;
-        let drawH = newImg.height;
-        let drawX = 0;
-        let drawY = 0;
-
-        if (editSettings.smartMatch) {
-          const scale = Math.min(bbox.w / newImg.width, bbox.h / newImg.height) * (editSettings.scale / 100);
-          drawW = newImg.width * scale;
-          drawH = newImg.height * scale;
-          drawX = bbox.x + (bbox.w - drawW) / 2 + editSettings.offsetX;
-          drawY = bbox.y + (bbox.h - drawH) / 2 + editSettings.offsetY;
-        } else {
-          const scale = editSettings.scale / 100;
-          drawW = newImg.width * scale;
-          drawH = newImg.height * scale;
-          drawX = (canvas.width - drawW) / 2 + editSettings.offsetX;
-          drawY = (canvas.height - drawH) / 2 + editSettings.offsetY;
-        }
+        // Base scale to match original image size relative to the canvas
+        const baseScale = Math.min(origImg.width / newImg.width, origImg.height / newImg.height);
+        const userScale = editSettings.scale / 100;
+        
+        const drawW = newImg.width * baseScale * userScale * 2;
+        const drawH = newImg.height * baseScale * userScale * 2;
+        
+        // Center in the padded canvas and apply user offsets
+        const drawX = (canvas.width - drawW) / 2 + (editSettings.offsetX * 2);
+        const drawY = (canvas.height - drawH) / 2 + (editSettings.offsetY * 2);
 
         if (editSettings.glowIntensity > 0) {
           ctx.shadowColor = editSettings.glowColor;
@@ -305,6 +274,32 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
   const applyEdit = () => {
     if (previewUrl && editingAsset) {
       setReplacedAssets(prev => ({ ...prev, [editingAsset.id]: previewUrl }));
+      
+      // PERSIST THE CHANGE IN THE VIDEO ITEM AND FIX Z-INDEX
+      if (videoItemRef.current) {
+        const videoItem = videoItemRef.current;
+        
+        // 1. Update the image resource in the videoItem itself
+        if (videoItem.images) {
+           videoItem.images[editingAsset.id] = previewUrl;
+           console.log(`Persisted image update for ${editingAsset.id}`);
+        }
+
+        // 2. Move sprite to end of array to ensure it renders on top
+        if (videoItem.sprites) {
+          const spriteIdx = videoItem.sprites.findIndex((s: any) => s.imageKey === editingAsset.id);
+          if (spriteIdx > -1) {
+            const sprite = videoItem.sprites.splice(spriteIdx, 1)[0];
+            videoItem.sprites.push(sprite);
+          }
+        }
+
+        // 3. Refresh player with the MODIFIED videoItem
+        if (playerRef.current) {
+          playerRef.current.setVideoItem(videoItem);
+          playerRef.current.startAnimation(); // Ensure it keeps playing
+        }
+      }
     }
     setEditingAsset(null);
   };
@@ -856,8 +851,9 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
             </div>
           )}
           <div 
+            id="svga-player-container"
             ref={containerRef} 
-            className="w-full h-full pointer-events-none" 
+            className="w-full h-full pointer-events-none flex items-center justify-center relative overflow-hidden" 
           />
         </div>
 
@@ -975,16 +971,16 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/60" dir="rtl">
           <div className="bg-slate-900/60 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
             {/* Preview Area */}
-            <div className="flex-1 p-6 flex flex-col items-center justify-center bg-slate-950/50 border-b md:border-b-0 md:border-l border-slate-800">
-              <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                <Eye size={18} className="text-indigo-400" />
+            <div className="flex-1 p-8 flex flex-col items-center justify-center bg-slate-950/50 border-b md:border-b-0 md:border-l border-slate-800">
+              <h3 className="text-white font-bold mb-6 flex items-center gap-2 text-xl">
+                <Eye size={22} className="text-indigo-400" />
                 معاينة القطعة
               </h3>
-              <div className="relative w-full max-w-sm aspect-square bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] bg-slate-900 border border-slate-700 rounded-xl overflow-hidden flex items-center justify-center p-4">
-                {previewUrl && <img src={previewUrl} className="max-w-full max-h-full object-contain drop-shadow-xl" alt="Preview" />}
+              <div className="relative w-full max-w-xl aspect-square bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] bg-slate-900 border border-slate-700/50 rounded-[3rem] flex items-center justify-center p-8 shadow-inner overflow-visible">
+                {previewUrl && <img src={previewUrl} className="max-w-none w-[120%] h-[120%] object-contain drop-shadow-2xl transition-transform" alt="Preview" />}
               </div>
-              <p className="text-slate-500 text-xs mt-4 text-center">
-                يتم تحديث العرض المباشر في مشغل SVGA تلقائياً لرؤية النتيجة
+              <p className="text-slate-500 text-sm mt-8 text-center max-w-sm font-bold">
+                تم توسيع منطقة المعاينة وإلغاء قيود الإطار لتسهيل عملية التكبير والتحريك دون تداخل.
               </p>
             </div>
 
@@ -1001,8 +997,8 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
               </div>
 
               <div className="flex flex-col gap-5">
-                {/* Smart Match Toggle */}
-                <label className="flex items-center justify-between cursor-pointer group">
+                {/* Smart Match Toggle - Label removed as requested */}
+                <label className="flex items-center justify-between cursor-pointer group opacity-0 pointer-events-none absolute h-0 w-0">
                   <span className="text-sm text-slate-300 group-hover:text-white transition-colors">المطابقة الذكية (للحجم والمكان)</span>
                   <div className="relative">
                     <input type="checkbox" className="sr-only peer" checked={editSettings.smartMatch} onChange={(e) => setEditSettings(s => ({...s, smartMatch: e.target.checked}))} />
@@ -1010,13 +1006,16 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
                   </div>
                 </label>
 
-                {/* Scale */}
+                {/* Scale (تكبير العنصر) */}
                 <div className="flex flex-col gap-2">
                   <div className="flex justify-between text-sm">
-                    <label className="text-slate-300">الحجم (Scale)</label>
-                    <span className="text-indigo-400 font-mono">{editSettings.scale}%</span>
+                    <label className="text-slate-300 font-bold">تكبير العنصر (Scale)</label>
+                    <span className="text-indigo-400 font-black">{editSettings.scale}%</span>
                   </div>
-                  <input type="range" min="10" max="200" value={editSettings.scale} onChange={(e) => setEditSettings(s => ({...s, scale: Number(e.target.value)}))} className="w-full accent-indigo-500" />
+                  <input type="range" min="10" max="400" value={editSettings.scale} onChange={(e) => setEditSettings(s => ({...s, scale: Number(e.target.value)}))} className="w-full accent-indigo-500 h-2 bg-slate-800 rounded-full appearance-none cursor-pointer" />
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-bold">
+                    يمكنك تكبير العنصر بحرية تامة، وسيبقى دائماً فوق العناصر الأخرى في المشهد.
+                  </p>
                 </div>
 
                 {/* X Offset */}
@@ -1067,13 +1066,19 @@ export const SVGAViewer: React.FC<SVGAViewerProps> = ({ file, onClear, originalF
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-4">
-                <button onClick={cancelEdit} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all">
-                  إلغاء
+              <div className="flex gap-4 mt-auto pt-6 border-t border-slate-800">
+                <button 
+                  onClick={cancelEdit}
+                  className="flex-1 py-4 bg-slate-800/10 hover:bg-slate-800/20 text-slate-400 border border-slate-700/50 rounded-2xl font-black text-sm transition-all backdrop-blur-md active:scale-95"
+                >
+                  إلغاء التعديل
                 </button>
-                <button onClick={applyEdit} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2">
+                <button 
+                  onClick={applyEdit}
+                  className="flex-1 py-4 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-2xl font-black text-sm transition-all backdrop-blur-md active:scale-95 flex items-center justify-center gap-2"
+                >
                   <Check size={18} />
-                  تطبيق
+                  تطبيق التعديلات
                 </button>
               </div>
             </div>

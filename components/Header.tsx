@@ -4,8 +4,8 @@ import { PlayCircle, LogOut, User as UserIcon } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 interface HeaderProps {
-  currentView?: 'viewer' | 'converter' | 'matcher' | 'admin' | 'profile';
-  setCurrentView?: (view: 'viewer' | 'converter' | 'matcher' | 'admin' | 'profile') => void;
+  currentView?: 'viewer' | 'converter' | 'image-editor' | 'matcher' | 'admin' | 'profile';
+  setCurrentView?: (view: 'viewer' | 'converter' | 'image-editor' | 'matcher' | 'admin' | 'profile') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ currentView = 'viewer', setCurrentView }) => {
@@ -51,6 +51,12 @@ export const Header: React.FC<HeaderProps> = ({ currentView = 'viewer', setCurre
                 className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all ${currentView === 'converter' ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
               >
                 تحويل فيديو
+              </button>
+              <button
+                onClick={() => setCurrentView('image-editor')}
+                className={`whitespace-nowrap px-3 sm:px-5 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold transition-all ${currentView === 'image-editor' ? 'bg-purple-500/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'}`}
+              >
+                تعديل الصور
               </button>
               <button
                 onClick={() => setCurrentView('matcher')}

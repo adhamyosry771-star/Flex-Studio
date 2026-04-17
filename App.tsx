@@ -5,6 +5,7 @@ import { SVGAViewer } from './components/SVGAViewer';
 import { DropZone } from './components/DropZone';
 import { VideoToSVGA } from './components/VideoToSVGA';
 import { ImageMatcher } from './components/ImageMatcher';
+import { ImageEditor } from './components/ImageEditor';
 import { AuthProvider, useAuth } from './components/AuthContext';
 import { Login } from './components/Login';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -138,7 +139,7 @@ const AppContent: React.FC = () => {
   const { user, loading, isBanned, isAdmin, isSubscribed, logout, userData, appSettings } = useAuth();
   const [currentFiles, setCurrentFiles] = useState<SVGAFileExtended[]>([]);
   const [history, setHistory] = useState<SVGAFileExtended[]>([]);
-  const [currentView, setCurrentView] = useState<'viewer' | 'converter' | 'matcher' | 'admin' | 'profile'>('viewer');
+  const [currentView, setCurrentView] = useState<'viewer' | 'converter' | 'image-editor' | 'matcher' | 'admin' | 'profile'>('viewer');
   const [showSubModal, setShowSubModal] = useState(false);
   const [subModalMode, setSubModalMode] = useState<'activate' | 'extend'>('activate');
 
@@ -235,6 +236,10 @@ const AppContent: React.FC = () => {
             ) : currentView === 'converter' ? (
               <motion.div key="converter" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <VideoToSVGA />
+              </motion.div>
+            ) : currentView === 'image-editor' ? (
+              <motion.div key="image-editor" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <ImageEditor />
               </motion.div>
             ) : currentView === 'matcher' ? (
               <motion.div key="matcher" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
