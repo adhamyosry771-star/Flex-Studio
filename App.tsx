@@ -1,19 +1,23 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Header } from './components/Header';
 import { SVGAViewer } from './components/SVGAViewer';
+import { PAGViewer } from './components/PAGViewer';
 import { DropZone } from './components/DropZone';
 import { VideoToSVGA } from './components/VideoToSVGA';
 import { ImageMatcher } from './components/ImageMatcher';
 import { ImageEditor } from './components/ImageEditor';
+import { FormatConverter } from './components/FormatConverter';
+import { APNGCreator } from './components/APNGCreator';
 import { AuthProvider, useAuth } from './components/AuthContext';
 import { Login } from './components/Login';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ProfilePage } from './components/ProfilePage';
 import { DynamicBackground } from './components/DynamicBackground';
 import { SVGAFileInfo, SVGAFileExtended } from './types';
-import { FolderUp, History, Info, Loader2, ShieldAlert, LogOut, Ticket, MessageCircle, X, CheckCircle2 } from 'lucide-react';
+import { FolderUp, History, Info, Loader2, ShieldAlert, LogOut, Ticket, MessageCircle, X, CheckCircle2, Trash2, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getHistoryItems, saveHistoryItem, deleteHistoryItem, clearUserHistory } from './components/HistoryDB';
 
 const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void; mode?: 'activate' | 'extend' }> = ({ isOpen, onClose, mode = 'activate' }) => {
   const { activateCode } = useAuth();
@@ -138,23 +142,131 @@ const SubscriptionModal: React.FC<{ isOpen: boolean; onClose: () => void; mode?:
 const AppContent: React.FC = () => {
   const { user, loading, isBanned, isAdmin, isSubscribed, logout, userData, appSettings } = useAuth();
   const [currentFiles, setCurrentFiles] = useState<SVGAFileExtended[]>([]);
+  const [currentPAGFiles, setCurrentPAGFiles] = useState<SVGAFileExtended[]>([]);
   const [history, setHistory] = useState<SVGAFileExtended[]>([]);
-  const [currentView, setCurrentView] = useState<'viewer' | 'converter' | 'image-editor' | 'matcher' | 'admin' | 'profile'>('viewer');
+  const [currentView, setCurrentView] = useState<'viewer' | 'pag-viewer' | 'apng-creator' | 'converter' | 'format-converter' | 'image-editor' | 'matcher' | 'admin' | 'profile'>('viewer');
   const [showSubModal, setShowSubModal] = useState(false);
   const [subModalMode, setSubModalMode] = useState<'activate' | 'extend'>('activate');
 
-  const handleViewChange = (view: any) => {
-    if (view === 'profile' || view === 'admin') {
-      setCurrentView(view);
+  // Load history from IndexedDB when user changes
+  useEffect(() => {
+    if (!user?.uid) {
+      setHistory([]);
       return;
     }
 
-    if (!isSubscribed && !isAdmin) {
-      setSubModalMode('activate');
-      setShowSubModal(true);
-      return;
+    const loadHistory = async () => {
+      try {
+        const items = await getHistoryItems(user.uid);
+        const mappedItems: SVGAFileExtended[] = items.map(item => {
+          const file = new File([item.fileData], item.name, { type: item.type, lastModified: item.lastModified });
+          return {
+            name: item.name,
+            size: item.size,
+            type: item.type,
+            lastModified: item.lastModified,
+            url: URL.createObjectURL(item.fileData),
+            rawFile: file
+          };
+        });
+        setHistory(mappedItems);
+      } catch (err) {
+        console.error('Failed to load history from IndexedDB', err);
+      }
+    };
+
+    loadHistory();
+  }, [user?.uid]);
+
+  // Redirect to SVGA Viewer ('viewer') on login / registration
+  useEffect(() => {
+    if (user?.uid) {
+      setCurrentView('viewer');
     }
+  }, [user?.uid]);
+
+  // Control selection, copy, and cut permissions depending on user identity
+  useEffect(() => {
+    const isAllowedToCopy = user?.email?.toLowerCase().trim() === 'adhamyosry56@gmail.com';
+
+    if (isAllowedToCopy) {
+      document.body.classList.add('allow-select');
+      document.body.classList.remove('disable-select');
+    } else {
+      document.body.classList.add('disable-select');
+      document.body.classList.remove('allow-select');
+    }
+
+    const handleCopyCut = (e: ClipboardEvent) => {
+      if (isAllowedToCopy) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    const handleSelectStart = (e: Event) => {
+      if (isAllowedToCopy) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    document.addEventListener('copy', handleCopyCut);
+    document.addEventListener('cut', handleCopyCut);
+    document.addEventListener('selectstart', handleSelectStart);
+
+    return () => {
+      document.removeEventListener('copy', handleCopyCut);
+      document.removeEventListener('cut', handleCopyCut);
+      document.removeEventListener('selectstart', handleSelectStart);
+      document.body.classList.remove('allow-select', 'disable-select');
+    };
+  }, [user?.email]);
+
+  const handleViewChange = (view: any) => {
     setCurrentView(view);
+  };
+
+  const handlePremiumClickCapture = (e: React.MouseEvent) => {
+    if (!isSubscribed && !isAdmin) {
+      const target = e.target as HTMLElement;
+      const interactive = target.closest('button, input, select, textarea, [role="button"], a, .cursor-pointer');
+      if (interactive) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSubModalMode('activate');
+        setShowSubModal(true);
+      }
+    }
+  };
+
+  const renderPremiumOverlay = () => {
+    return (
+      <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md rounded-3xl p-6 text-center border border-slate-800/40">
+        <div className="w-16 h-16 bg-blue-600/10 border border-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center mb-4 animate-pulse">
+          <Lock size={28} />
+        </div>
+        <h3 className="text-lg font-black text-white mb-2">هذه الميزة مخصصة للمشتركين فقط</h3>
+        <p className="text-slate-400 text-xs sm:text-sm max-w-sm mb-6 leading-relaxed">
+          يرجى تفعيل اشتراكك لتتمكن من استخدام هذه الأداة الاحترافية والوصول إلى كافة الميزات.
+        </p>
+        <button 
+          onClick={() => {
+            setSubModalMode('activate');
+            setShowSubModal(true);
+          }}
+          className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm rounded-full shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all active:scale-95 cursor-pointer"
+        >
+          اشترك الآن لتفعيل الحساب
+        </button>
+      </div>
+    );
   };
 
   const handleFilesUpload = useCallback((files: File[]) => {
@@ -173,12 +285,119 @@ const AppContent: React.FC = () => {
     }));
     
     setCurrentFiles(prev => [...prev, ...newFilesInfo]);
-    setHistory(prev => {
-      const newNames = newFilesInfo.map(f => f.name);
-      const filtered = prev.filter(p => !newNames.includes(p.name));
-      return [...newFilesInfo, ...filtered].slice(0, 20);
+    
+    if (user?.uid) {
+      const saveAndReload = async () => {
+        try {
+          for (const file of files) {
+            await saveHistoryItem(user.uid, file, file.name, file.size, file.type, file.lastModified);
+          }
+          const items = await getHistoryItems(user.uid);
+          const mappedItems: SVGAFileExtended[] = items.map(item => {
+            const fileObj = new File([item.fileData], item.name, { type: item.type, lastModified: item.lastModified });
+            return {
+              name: item.name,
+              size: item.size,
+              type: item.type,
+              lastModified: item.lastModified,
+              url: URL.createObjectURL(item.fileData),
+              rawFile: fileObj
+            };
+          });
+          setHistory(mappedItems);
+        } catch (err) {
+          console.error('Failed to save history items to DB', err);
+        }
+      };
+      saveAndReload();
+    } else {
+      setHistory(prev => {
+        const newNames = newFilesInfo.map(f => f.name);
+        const filtered = prev.filter(p => !newNames.includes(p.name));
+        return [...newFilesInfo, ...filtered].slice(0, 20);
+      });
+    }
+  }, [isSubscribed, isAdmin, user?.uid]);
+
+  const handlePAGFilesUpload = useCallback((files: File[]) => {
+    if (!isSubscribed && !isAdmin) {
+      setSubModalMode('activate');
+      setShowSubModal(true);
+      return;
+    }
+    const newFilesInfo: SVGAFileExtended[] = files.map(file => ({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified,
+      url: URL.createObjectURL(file),
+      rawFile: file
+    }));
+    
+    setCurrentPAGFiles(prev => [...prev, ...newFilesInfo]);
+    
+    if (user?.uid) {
+      const saveAndReload = async () => {
+        try {
+          for (const file of files) {
+            await saveHistoryItem(user.uid, file, file.name, file.size, file.type, file.lastModified);
+          }
+          const items = await getHistoryItems(user.uid);
+          const mappedItems: SVGAFileExtended[] = items.map(item => {
+            const fileObj = new File([item.fileData], item.name, { type: item.type, lastModified: item.lastModified });
+            return {
+              name: item.name,
+              size: item.size,
+              type: item.type,
+              lastModified: item.lastModified,
+              url: URL.createObjectURL(item.fileData),
+              rawFile: fileObj
+            };
+          });
+          setHistory(mappedItems);
+        } catch (err) {
+          console.error('Failed to save history items to DB', err);
+        }
+      };
+      saveAndReload();
+    } else {
+      setHistory(prev => {
+        const newNames = newFilesInfo.map(f => f.name);
+        const filtered = prev.filter(p => !newNames.includes(p.name));
+        return [...newFilesInfo, ...filtered].slice(0, 20);
+      });
+    }
+  }, [isSubscribed, isAdmin, user?.uid]);
+
+  const handlePAGHistoryClick = (item: SVGAFileExtended) => {
+    setCurrentPAGFiles(prev => {
+      if (prev.find(p => p.name === item.name)) return prev;
+      return [...prev, item];
     });
-  }, [isSubscribed, isAdmin]);
+  };
+
+  const handleDeleteHistoryItem = async (e: React.MouseEvent, name: string) => {
+    e.stopPropagation();
+    if (!user?.uid) return;
+    try {
+      await deleteHistoryItem(user.uid, name);
+      setHistory(prev => prev.filter(item => item.name !== name));
+    } catch (err) {
+      console.error('Failed to delete history item', err);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!user?.uid) return;
+    if (window.confirm('هل أنت متأكد من رغبتك في مسح السجل بالكامل؟')) {
+      try {
+        await clearUserHistory(user.uid);
+        setHistory([]);
+      } catch (err) {
+        console.error('Failed to clear history', err);
+      }
+    }
+  };
 
   const handleHistoryClick = (item: SVGAFileExtended) => {
     setCurrentFiles(prev => {
@@ -234,117 +453,185 @@ const AppContent: React.FC = () => {
                 <AdminDashboard />
               </motion.div>
             ) : currentView === 'converter' ? (
-              <motion.div key="converter" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+              <motion.div key="converter" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onClickCapture={handlePremiumClickCapture}>
                 <VideoToSVGA />
               </motion.div>
+            ) : currentView === 'apng-creator' ? (
+              <motion.div key="apng-creator" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onClickCapture={handlePremiumClickCapture}>
+                <APNGCreator />
+              </motion.div>
+            ) : currentView === 'format-converter' ? (
+              <motion.div key="format-converter" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onClickCapture={handlePremiumClickCapture}>
+                <FormatConverter />
+              </motion.div>
             ) : currentView === 'image-editor' ? (
-              <motion.div key="image-editor" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+              <motion.div key="image-editor" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onClickCapture={handlePremiumClickCapture}>
                 <ImageEditor />
               </motion.div>
             ) : currentView === 'matcher' ? (
-              <motion.div key="matcher" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+              <motion.div key="matcher" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onClickCapture={handlePremiumClickCapture}>
                 <ImageMatcher />
               </motion.div>
-            ) : currentFiles.length === 0 ? (
-              <motion.div key="viewer-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col lg:flex-row gap-8">
-                <div className="flex-1">
-                  <div 
-                    className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative"
-                    onClickCapture={(e) => {
-                      if (!isSubscribed && !isAdmin) {
-                        e.stopPropagation();
-                        setShowSubModal(true);
-                      }
-                    }}
-                  >
-                    <DropZone onFilesSelect={handleFilesUpload} />
-                  </div>
-                </div>
-  
-                <div className="w-full lg:w-80">
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 h-full min-h-[400px]">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-2 text-blue-400">
-                        <History size={20} />
-                        <h2 className="font-bold text-lg">السجل</h2>
+            ) : currentView === 'pag-viewer' ? (
+              <motion.div key="pag-viewer" className="relative w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClickCapture={handlePremiumClickCapture}>
+                {currentPAGFiles.length === 0 ? (
+                  <div className="flex flex-col lg:flex-row gap-8">
+                    <div className="flex-1">
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
+                        <DropZone 
+                          acceptedExtension=".pag"
+                          title="قم بسحب ملفات PAG هنا"
+                          subtitle="أو انقر لاختيار ملفات من جهازك. يدعم العارض عرض عدة ملفات في نفس الوقت."
+                          onFilesSelect={handlePAGFilesUpload} 
+                        />
                       </div>
                     </div>
-  
-                    {history.length > 0 ? (
-                      <div className="flex flex-col gap-3">
-                          {history.map((item, idx) => (
-                          <button
-                            key={`${item.name}-${idx}`}
-                            onClick={() => handleHistoryClick(item)}
-                            className="flex items-center gap-3 p-3 rounded-full border border-transparent bg-slate-800/40 hover:border-slate-700 text-slate-300 transition-all text-right group"
-                          >
-                            <div className="bg-slate-800 p-2 rounded-full group-hover:bg-slate-700">
-                              <FolderUp size={16} className="text-blue-400" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{item.name}</p>
-                              <p className="text-[10px] text-slate-500">{formatSize(item.size)}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-slate-500 py-20">
-                        <History size={40} className="mb-4 opacity-20" />
-                        <p className="text-xs">السجل فارغ</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div key="viewer-files" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-8">
-                <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
-                  <h2 className="text-white font-bold">الملفات المفتوحة ({currentFiles.length})</h2>
-                  <button 
-                    onClick={() => document.getElementById('add-more-files')?.click()} 
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-sm font-bold transition-all"
-                  >
-                    إضافة ملفات أخرى
-                  </button>
-                  <input 
-                    id="add-more-files" 
-                    type="file" 
-                    className="hidden" 
-                    accept=".svga"
-                    multiple
-                    onChange={(e) => {
-                      const files = (Array.from(e.target.files || []) as File[]).filter(f => f.name.toLowerCase().endsWith('.svga'));
-                      if (files.length > 0) handleFilesUpload(files);
-                      e.target.value = '';
-                    }}
-                  />
-                </div>
-  
-                <div className={`grid gap-8 ${currentFiles.length === 1 ? 'grid-cols-1' : currentFiles.length === 2 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'}`}>
-                  {currentFiles.map((file, idx) => (
-                    <div key={`${file.name}-${idx}`} className="flex flex-col gap-4">
-                      <SVGAViewer 
-                        file={file} 
-                        onClear={() => setCurrentFiles(prev => prev.filter(f => f !== file))} 
-                        originalFile={file.rawFile}
-                      />
-  
-                      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-[10px] text-slate-500 mb-1 uppercase">اسم الملف</p>
-                            <p className="text-xs font-bold truncate text-white" title={file.name}>{file.name}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-slate-500 mb-1 uppercase">حجم البيانات</p>
-                            <p className="text-xs font-bold text-white">{formatSize(file.size)}</p>
+      
+                    <div className="w-full lg:w-80">
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 h-[315px] flex flex-col">
+                        <div className="flex items-center justify-between mb-6 shrink-0">
+                           <div className="flex items-center gap-2 text-blue-400">
+                            <History size={20} />
+                            <h2 className="font-bold text-lg">سجل ملفات PAG</h2>
                           </div>
                         </div>
+      
+                        {history.filter(item => item.name.toLowerCase().endsWith('.pag')).length > 0 ? (
+                          <div dir="ltr" className="flex-1 flex flex-col overflow-y-auto pl-1 history-scrollbar">
+                            <div dir="rtl" className="flex flex-col gap-3">
+                              {history.filter(item => item.name.toLowerCase().endsWith('.pag')).map((item, idx) => (
+                                <div key={`${item.name}-${idx}`} className="relative group">
+                                  <button
+                                    onClick={() => handlePAGHistoryClick(item)}
+                                    className="w-full flex items-center gap-3 p-3 rounded-full border border-transparent bg-slate-800/40 hover:border-slate-700 text-slate-300 transition-all text-right"
+                                  >
+                                    <div className="bg-slate-800 p-2 rounded-full shrink-0">
+                                      <FolderUp size={16} className="text-blue-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0 text-right">
+                                      <p className="text-sm font-medium truncate">{item.name}</p>
+                                      <p className="text-[10px] text-slate-500">{formatSize(item.size)}</p>
+                                    </div>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-10">
+                            <History size={40} className="mb-4 opacity-20 shrink-0" />
+                            <p className="text-xs">السجل فارغ</p>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-8">
+                    <div className={`grid gap-8 ${currentPAGFiles.length === 1 ? 'grid-cols-1' : currentPAGFiles.length === 2 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'}`}>
+                      {currentPAGFiles.map((file, idx) => (
+                        <div key={`${file.name}-${idx}`} className="flex flex-col gap-4">
+                          <PAGViewer 
+                            file={file} 
+                            onClear={() => setCurrentPAGFiles(prev => prev.filter(f => f !== file))} 
+                            originalFile={file.rawFile}
+                          />
+      
+                          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-[10px] text-slate-500 mb-1 uppercase">اسم الملف</p>
+                                <p className="text-xs font-bold truncate text-white" title={file.name}>{file.name}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-slate-500 mb-1 uppercase">حجم البيانات</p>
+                                <p className="text-xs font-bold text-white">{formatSize(file.size)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            ) : (
+              <motion.div key="viewer" className="relative w-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClickCapture={handlePremiumClickCapture}>
+                {currentFiles.length === 0 ? (
+                  <div className="flex flex-col lg:flex-row gap-8">
+                    <div className="flex-1">
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
+                        <DropZone onFilesSelect={handleFilesUpload} />
+                      </div>
+                    </div>
+      
+                    <div className="w-full lg:w-80">
+                      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 h-[315px] flex flex-col">
+                        <div className="flex items-center justify-between mb-6 shrink-0">
+                          <div className="flex items-center gap-2 text-blue-400">
+                            <History size={20} />
+                            <h2 className="font-bold text-lg">السجل</h2>
+                          </div>
+                        </div>
+      
+                        {history.filter(item => item.name.toLowerCase().endsWith('.svga')).length > 0 ? (
+                          <div dir="ltr" className="flex-1 flex flex-col overflow-y-auto pl-1 history-scrollbar">
+                            <div dir="rtl" className="flex flex-col gap-3">
+                              {history.filter(item => item.name.toLowerCase().endsWith('.svga')).map((item, idx) => (
+                                <div key={`${item.name}-${idx}`} className="relative group">
+                                  <button
+                                    onClick={() => handleHistoryClick(item)}
+                                    className="w-full flex items-center gap-3 p-3 rounded-full border border-transparent bg-slate-800/40 hover:border-slate-700 text-slate-300 transition-all text-right"
+                                  >
+                                    <div className="bg-slate-800 p-2 rounded-full shrink-0">
+                                      <FolderUp size={16} className="text-blue-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0 text-right">
+                                      <p className="text-sm font-medium truncate">{item.name}</p>
+                                      <p className="text-[10px] text-slate-500">{formatSize(item.size)}</p>
+                                    </div>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 py-10">
+                            <History size={40} className="mb-4 opacity-20 shrink-0" />
+                            <p className="text-xs">السجل فارغ</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-8">
+                    <div className={`grid gap-8 ${currentFiles.length === 1 ? 'grid-cols-1' : currentFiles.length === 2 ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'}`}>
+                      {currentFiles.map((file, idx) => (
+                        <div key={`${file.name}-${idx}`} className="flex flex-col gap-4">
+                          <SVGAViewer 
+                            file={file} 
+                            onClear={() => setCurrentFiles(prev => prev.filter(f => f !== file))} 
+                            originalFile={file.rawFile}
+                          />
+      
+                          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-[10px] text-slate-500 mb-1 uppercase">اسم الملف</p>
+                                <p className="text-xs font-bold truncate text-white" title={file.name}>{file.name}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-slate-500 mb-1 uppercase">حجم البيانات</p>
+                                <p className="text-xs font-bold text-white">{formatSize(file.size)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

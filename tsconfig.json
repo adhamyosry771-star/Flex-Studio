@@ -25,5 +25,21 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "components/AdminPanel.tsx",
+    "components/ArtifactCard.tsx",
+    "components/CPAdmin.tsx",
+    "components/CreateRoomModal.tsx",
+    "components/NewsPage.tsx",
+    "components/NotificationsPage.tsx",
+    "components/QuantumScene.tsx",
+    "components/RoomCard.tsx",
+    "components/SetupProfile.tsx",
+    "components/StoreModal.tsx",
+    "components/VoiceRoom.tsx",
+    "components/MessagesPage.tsx",
+    "components/SideDrawer.tsx",
+    "constants.ts"
+  ]
 }

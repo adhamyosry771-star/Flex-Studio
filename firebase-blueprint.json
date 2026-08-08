@@ -39,6 +39,17 @@
       "properties": {
         "logoURL": { "type": "string" }
       }
+    },
+    "PromoBanner": {
+      "title": "Promo Banner",
+      "description": "Promotional banners displayed below history logs in viewers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "imageUrl", "createdAt"]
     }
   },
   "firestore": {
@@ -53,6 +64,10 @@
     "/appSettings/{settingId}": {
       "schema": "AppSettings",
       "description": "Global settings documents"
+    },
+    "/banners/{bannerId}": {
+      "schema": "PromoBanner",
+      "description": "Promotional banner slide documents"
     }
   }
 }
