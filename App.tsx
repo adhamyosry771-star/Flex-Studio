@@ -1,8 +1,11 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Header } from './components/Header';
+import { Header, ViewType } from './components/Header';
 import { SVGAViewer } from './components/SVGAViewer';
 import { PAGViewer } from './components/PAGViewer';
+import { VABViewer } from './components/VABViewer';
+import { VAPCreator } from './components/VAPCreator';
+import { MP4AlphaCreator } from './components/MP4AlphaCreator';
 import { DropZone } from './components/DropZone';
 import { VideoToSVGA } from './components/VideoToSVGA';
 import { ImageMatcher } from './components/ImageMatcher';
@@ -144,7 +147,8 @@ const AppContent: React.FC = () => {
   const [currentFiles, setCurrentFiles] = useState<SVGAFileExtended[]>([]);
   const [currentPAGFiles, setCurrentPAGFiles] = useState<SVGAFileExtended[]>([]);
   const [history, setHistory] = useState<SVGAFileExtended[]>([]);
-  const [currentView, setCurrentView] = useState<'viewer' | 'pag-viewer' | 'apng-creator' | 'converter' | 'format-converter' | 'image-editor' | 'matcher' | 'admin' | 'profile'>('viewer');
+  const [currentView, setCurrentView] = useState<ViewType>('viewer');
+  const [vabInitialFile, setVabInitialFile] = useState<File | null>(null);
   const [showSubModal, setShowSubModal] = useState(false);
   const [subModalMode, setSubModalMode] = useState<'activate' | 'extend'>('activate');
 
@@ -451,6 +455,19 @@ const AppContent: React.FC = () => {
             ) : currentView === 'admin' ? (
               <motion.div key="admin" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
                 <AdminDashboard />
+              </motion.div>
+            ) : currentView === 'vab' ? (
+              <motion.div key="vab" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <VAPCreator />
+              </motion.div>
+            ) : currentView === 'mp4-alpha' ? (
+              <motion.div key="mp4-alpha" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onClickCapture={handlePremiumClickCapture}>
+                <MP4AlphaCreator 
+                  onOpenInVabViewer={(file) => {
+                    setVabInitialFile(file);
+                    setCurrentView('vab');
+                  }} 
+                />
               </motion.div>
             ) : currentView === 'converter' ? (
               <motion.div key="converter" className="relative w-full" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} onClickCapture={handlePremiumClickCapture}>
