@@ -438,7 +438,7 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-right relative" dir="rtl">
       {/* Dynamic Background */}
-      <DynamicBackground url={appSettings?.mainBgURL} overlayOpacity={0.8} />
+      <DynamicBackground url={appSettings?.mainBgURL} overlayOpacity={0.72} />
 
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header currentView={currentView} setCurrentView={handleViewChange} />
